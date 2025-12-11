@@ -8,6 +8,7 @@ Render storyboard keyframes and short clips from a YAML script via ComfyUI (API 
 - API-format workflows exported from ComfyUI:
   - `workflow_image_api.json` (uses CLIP nodes 6/7, SaveImage 9 by default)
   - `workflow_video_api.json` (uses CLIP nodes 6/7, latent 55, SaveVideo 58 by default)
+ - ComfyUI folder on disk (ignored by git) containing your models/checkpoints/inputs/outputs
 
 ## Setup
 ```
@@ -22,6 +23,15 @@ IMAGE_WORKFLOW_PATH=workflow_image_api.json
 VIDEO_WORKFLOW_PATH=workflow_video_api.json
 COMFY_INPUT_DIR=ComfyUI/input  # where keyframes get copied for video input
 ```
+
+### Where to place files in ComfyUI
+- `ComfyUI/` (ignored by git) should be your local ComfyUI install.
+- Place your API-format workflow exports in this repo root as `workflow_image_api.json` and `workflow_video_api.json` (or set paths in `.env`).
+- Models/checkpoints/VAEs stay in the usual ComfyUI folders:
+  - `ComfyUI/models/checkpoints/` (e.g., `z-image-turbo-fp8-aio.safetensors`, `wan2.2_ti2v_5B_fp16.safetensors`)
+  - `ComfyUI/models/vae/` (e.g., `wan2.2_vae.safetensors`)
+  - `ComfyUI/models/clip/` (e.g., `umt5_xxl_fp8_e4m3fn_scaled.safetensors`)
+- Generated keyframes are copied to `ComfyUI/input/` (configurable via `COMFY_INPUT_DIR`) so the video workflow can read them.
 
 ## Running
 Render all acts/scenes/beats from a YAML script and save outputs to `movie_output/`:

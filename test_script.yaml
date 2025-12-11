@@ -1,0 +1,67 @@
+title: "Test Film"
+theme: "dreamy sci-fi memory"
+
+acts:
+  - name: "Act 1"
+    scenes:
+      - name: "Scene 1 - Rooftop Intro"
+        location: "nighttime city rooftop"
+        style: "soft anamorphic, 1980s sci-fi, slight film grain"
+        lighting: "moody backlight, neon edge light"
+        props:
+          - "flickering holo-billboard in background"
+          - "loose papers blowing in the wind"
+        players:
+          - name: "Hero"
+            description: "tired archivist in long coat, reflective visor"
+        beats:
+          - id: "A1-S1-B1"
+            shot:
+              type: "wide establishing"
+              framing: "hero on rooftop edge"
+              camera: "static"
+            action: "Hero stands on the edge of the rooftop, coat blowing in the wind, looking over the city."
+            sfx: "soft wind, distant hover-cars"
+            vfx: "subtle holographic glitches in the skyline"
+            dialogue: "Voiceover: 'Every memory has a cost.'"
+          - id: "A1-S1-B2"
+            shot:
+              type: "medium close"
+              framing: "profile of hero"
+              camera: "slow push in"
+            action: "Close on Hero's visor reflecting neon signs; a faint HUD flickers."
+            sfx: "quiet radio static"
+            vfx: "HUD reflection flicker"
+            dialogue: "Hero whispers: 'Not again.'"
+
+      - name: "Scene 2 - Alley Exit"
+        location: "rain-slick neon alley"
+        style: "high contrast, chrome reflections"
+        lighting: "wet reflections, blue-pink neon spill"
+        props:
+          - "neon signs"
+          - "steam vents"
+        players:
+          - name: "Hero"
+            description: "coat up, hood on"
+          - name: "Courier"
+            description: "masked figure with glowing satchel"
+        beats:
+          - id: "A1-S2-B1"
+            shot:
+              type: "over-shoulder"
+              framing: "Courier handing data drive"
+              camera: "handheld"
+            action: "Courier presses a data drive into Hero's hand, glancing over their shoulder."
+            sfx: "distant siren, dripping water"
+            vfx: "data drive glows softly"
+            dialogue: "Courier: 'Run.'"
+          - id: "A1-S2-B2"
+            shot:
+              type: "wide escape"
+              framing: "Hero running down alley"
+              camera: "tracking"
+            action: "Hero bolts through steam and neon haze toward the street."
+            sfx: "footsteps splashing, rising siren"
+            vfx: "motion blur on neon reflections"
+            dialogue: ""

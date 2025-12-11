@@ -1,0 +1,17 @@
+# Python virtualenv
+venv/
+
+# ComfyUI local checkout
+ComfyUI/
+
+# Generated outputs
+movie_output/
+
+# Local config
+.env
+
+# Caches
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store

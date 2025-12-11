@@ -1,0 +1,523 @@
+title: "CONGO 2.0 – Our Version, Friend"
+global_theme: "Corporate extraction, haunted datacenter jungle, language-as-weapon"
+global_style: "High-contrast jungle noir, shallow depth of field, desaturated palette with tight, controlled greens, 16:9 cinematic"
+
+acts:
+  - id: "Act_1"
+    title: "The Fall"
+    scenes:
+      - id: "A1_S1_B1-18"
+        name: "Jungle Drop – AMY’s Crash"
+        scene_number: 1
+        location: "Nighttime jungle above Central Africa, cargo jet in freefall"
+        theme: "Loss of control, AI as cargo not companion"
+        style: "Handheld, chaotic, visceral; crash-movie cold open"
+        beats:
+
+          - id: "A1_S1_B1"
+            time_range: "00:00-00:05"
+            duration_seconds: 5
+            action: >
+              Violently shaking POV from AMY’s eye-camera as the cargo hold
+              spins out of control; alarms blare and the plane groans.
+            shot:
+              type: "POV"
+              framing: "INT. CARGO HOLD – CLOSE POV FROM ROBOTIC APE"
+              camera_movement: "Wild handheld, rolling, motion-blur smears"
+            composition:
+              theme: "Mechanical life in mortal danger"
+              style: "Strobing red emergency lights, hard contrast, heavy motion blur"
+              props:
+                - "Cargo straps whipping"
+                - "Loose crates"
+                - "Red strobing alarm lights"
+              location: "Interior cargo bay of failing plane"
+              lighting: "Red emergency strobes, occasional white lightning flashes"
+              players:
+                - "AMY – robotic ape with camera eye (POV only)"
+                - "PLANE COMPUTER VOICE (off-screen)"
+              sfx:
+                - "BLARING ALARMS"
+                - "METAL SCREAMING"
+                - "ENGINE ROAR"
+              vfx:
+                - "Motion blur and camera roll"
+                - "Sparks from ripped wiring"
+              dialogue:
+                - speaker: "COMPUTER (V.O.)"
+                  line: "Warning. Hull breach. Altitude critical."
+
+          - id: "A1_S1_B2"
+            time_range: "00:05-00:10"
+            duration_seconds: 5
+            action: >
+              AMY’s POV is slammed against the cargo net; horizon spins as the
+              plane banks; we glimpse jungle canopy through a tearing side hatch.
+            shot:
+              type: "POV"
+              framing: "CLOSE POV, ANGLED, PARTIALLY OBSTRUCTED BY CARGO NET"
+              camera_movement: "Whiplash pans with each impact"
+            composition:
+              theme: "Trapped intelligence seeing its own end"
+              style: "Hyper-kinetic, smeared light trails, claustrophobic framing"
+              props:
+                - "Cargo net"
+                - "Half-open hatch"
+                - "Straps snapping"
+              location: "Same cargo hold, side hatch now torn open"
+              lighting: "Red interior vs. cold moonlight leaking through hatch"
+              players:
+                - "AMY (POV only)"
+              sfx:
+                - "WHOOSH of wind through hatch"
+                - "CARGO RATTLES"
+              vfx:
+                - "Blown rain and mist entering the hold"
+              dialogue: []
+
+          - id: "A1_S1_B3"
+            time_range: "00:10-00:15"
+            duration_seconds: 5
+            action: >
+              Cut to exterior wide: burning cargo jet drops through storm clouds,
+              tiny against the churning sky and lightning spiderwebs.
+            shot:
+              type: "WIDE"
+              framing: "EXT. NIGHT SKY – FULL PLANE IN FRAME"
+              camera_movement: "Slow tracking as the plane falls toward camera"
+            composition:
+              theme: "Tiny human tech versus massive jungle sky"
+              style: "Epic disaster-movie wide, silhouetted against lightning"
+              props:
+                - "Flaming engine"
+                - "Trailing smoke"
+              location: "Night sky above unbroken jungle canopy"
+              lighting: "Lightning backlights the plane, flashes freeze-frame the fall"
+              players:
+                - "PLANE (as doomed object)"
+              sfx:
+                - "DISTANT ROAR OF ENGINES"
+                - "THUNDER CLAPS"
+              vfx:
+                - "CG plane and cloudscape"
+                - "Electrical arcing along fuselage"
+              dialogue: []
+
+          - id: "A1_S1_B4"
+            time_range: "00:15-00:20"
+            duration_seconds: 5
+            action: >
+              Back inside: AMY’s POV locks onto an overhead emergency monitor
+              showing altitude and impact countdown; HUD glitches.
+            shot:
+              type: "POV INSERT"
+              framing: "MONITOR IN EXTREME CLOSE-UP, HUD ELEMENTS OVERLAY"
+              camera_movement: "Micro jitters from turbulence"
+            composition:
+              theme: "Quantified doom"
+              style: "Techno-thriller UI overlay, scanlines, data corruption"
+              props:
+                - "CRT-style altitude monitor"
+                - "Warning icons and countdown numerals"
+              location: "Cargo hold, ceiling monitor"
+              lighting: "Monitor glow cuts through red emergency wash"
+              players:
+                - "AMY (POV HUD)"
+              sfx:
+                - "BEEPING, accelerating"
+              vfx:
+                - "Glitching UI, dropped frames, pixel smear"
+              dialogue:
+                - speaker: "COMPUTER (V.O.)"
+                  line: "Impact imminent."
+
+          - id: "A1_S1_B5"
+            time_range: "00:20-00:25"
+            duration_seconds: 5
+            action: >
+              Hard cut to cockpit: pilots fight uselessly with controls as the
+              jungle rushes up in front of them.
+            shot:
+              type: "MEDIUM TWO-SHOT"
+              framing: "INT. COCKPIT – PILOTS IN PROFILE"
+              camera_movement: "Shaky cam, slight handheld pull-in"
+            composition:
+              theme: "Human panic versus inevitable crash"
+              style: "Sweaty, cramped, instrument panels flickering"
+              props:
+                - "Yoke violently shaking"
+                - "HUD glass"
+                - "Clipboards, coffee cup floating"
+              location: "Cockpit windows framing green-black jungle below"
+              lighting: "Sickly instrument panel glow plus intermittent lightning"
+              players:
+                - "PILOT"
+                - "CO-PILOT"
+              sfx:
+                - "STALL WARNER"
+                - "PILOTS SHOUTING OVER EACH OTHER"
+              vfx:
+                - "Jungle rushing toward glass"
+              dialogue:
+                - speaker: "PILOT"
+                  line: "We’re not clearing those trees!"
+                - speaker: "CO-PILOT"
+                  line: "Brace—!"
+
+          - id: "A1_S1_B6"
+            time_range: "00:25-00:30"
+            duration_seconds: 5
+            action: >
+              AMY’s POV again as the cargo bay snaps open and the crate she’s in
+              is torn free, tumbling into the night.
+            shot:
+              type: "POV"
+              framing: "INT. HOLD → EXT. VOID TRANSITION"
+              camera_movement: "Sudden forward lurch, then free tumbling spin"
+            composition:
+              theme: "Birth-by-ejection"
+              style: "From enclosed red to infinite dark blue jungle void"
+              props:
+                - "Crate edges"
+                - "Shredded cargo net"
+              location: "From plane interior out into open storm air"
+              lighting: "Red fades into moonlit blue as crate exits plane"
+              players:
+                - "AMY (POV)"
+              sfx:
+                - "METAL RIP"
+                - "HURRICANE WIND"
+              vfx:
+                - "Debris flying past camera"
+                - "Plane receding above"
+
+          - id: "A1_S1_B7"
+            time_range: "00:30-00:35"
+            duration_seconds: 5
+            action: >
+              Exterior shot: AMY’s crate spins end over end beneath a torn
+              parachute, trailing sparks and fragments.
+            shot:
+              type: "WIDE / 3D TRACKING"
+              framing: "CRATE IN MID-FRAME, PLANE BURNING ABOVE"
+              camera_movement: "Orbiting move around falling crate"
+            composition:
+              theme: "Junk satellite returning to earth"
+              style: "Stylized parallax with jungle floor far below"
+              props:
+                - "Metal crate with stenciled corporate logo"
+                - "Half-deployed parachute canopy"
+              location: "High above jungle canopy"
+              lighting: "Backlit by moon, edges rim-lit"
+              players:
+                - "AMY’S CRATE"
+              sfx:
+                - "FLAPPING CANOPY"
+                - "DISTANT EXPLOSION as plane begins to break apart"
+              vfx:
+                - "Smoke trail arcs"
+                - "Plane detonating in background"
+
+          - id: "A1_S1_B8"
+            time_range: "00:35-00:40"
+            duration_seconds: 5
+            action: >
+              AMY’s POV: the crate window gives a smeared tunnel-vision glimpse
+              of the jungle rushing up, branches like claws reaching.
+            shot:
+              type: "POV"
+              framing: "NARROW VIEW THROUGH CRATE SLIT"
+              camera_movement: "Chaotic spin but slightly stabilized in software"
+            composition:
+              theme: "Jungle as hungry system"
+              style: "Branches and vines frame the whole image as teeth"
+              props:
+                - "Metal window frame"
+                - "Fogged glass/plastic"
+              location: "Approaching upper jungle canopy"
+              lighting: "Moonlight filtered through mist"
+              players:
+                - "AMY (POV)"
+              sfx:
+                - "RISING WIND PITCH"
+              vfx:
+                - "Motion blur plus depth-of-field flattening right before impact"
+              dialogue:
+                - speaker: "AMY (glitchy synth-voice, low)"
+                  line: "...falling..."
+
+          - id: "A1_S1_B9"
+            time_range: "00:40-00:45"
+            duration_seconds: 5
+            action: >
+              Impact: exterior shot as the crate smashes through canopy, showering
+              leaves and splintered branches, then disappears into darkness.
+            shot:
+              type: "WIDE CRASH"
+              framing: "Crate entering frame from above, canopy in foreground"
+              camera_movement: "Locked angle; debris flies toward camera"
+            composition:
+              theme: "Invasion of pristine system"
+              style: "High-speed, hyper-detailed debris in slow motion, then snap back to real-time"
+              props:
+                - "Tree limbs"
+                - "Exploding fronds and leaves"
+              location: "Jungle canopy edge"
+              lighting: "Moonlight shafts through broken branches"
+              players:
+                - "CRATE"
+              sfx:
+                - "WOODEN IMPACTS"
+                - "METAL CRUNCH"
+              vfx:
+                - "Particle sim for leaves and splinters"
+              dialogue: []
+
+          - id: "A1_S1_B10"
+            time_range: "00:45-00:50"
+            duration_seconds: 5
+            action: >
+              AMY’s POV goes to static on impact, then slowly resolves into
+              glitchy, skewed image of the crate interior.
+            shot:
+              type: "POV GLITCH"
+              framing: "Interior crate walls skewed, rolling shutter artifacts"
+              camera_movement: "Micro-tilt as crate settles"
+            composition:
+              theme: "System reboot after trauma"
+              style: "Analog-style static, desync, chromatic aberration"
+              props:
+                - "Interior bolts"
+                - "Loose wires hanging"
+              location: "Crate resting at odd angle on jungle floor"
+              lighting: "Dim, with faint greenish leak through cracks"
+              players:
+                - "AMY (POV HUD STARTUP)"
+              sfx:
+                - "TINNY REBOOT CHIME"
+                - "ELECTRICAL BUZZ"
+              vfx:
+                - "Interlaced lines, glitch transitions"
+              dialogue:
+                - speaker: "SYSTEM (TEXT OVERLAY)"
+                  line: "Reinitializing visual cortex..."
+
+          - id: "A1_S1_B11"
+            time_range: "00:50-00:55"
+            duration_seconds: 5
+            action: >
+              Exterior low angle: the crate sits half-buried in foliage, steam
+              rising; burning fragments of the plane fall in the distant sky.
+            shot:
+              type: "LOW ANGLE WIDE"
+              framing: "Crate foreground, burning debris streaking above"
+              camera_movement: "Slow dolly-in toward crate"
+            composition:
+              theme: "Relic from the sky in ancient forest"
+              style: "Moody, misty, almost sacred tableau"
+              props:
+                - "Crushed ferns"
+                - "Smoke plumes"
+                - "Tiny fires on nearby leaves"
+              location: "Dense jungle clearing at night"
+              lighting: "Cool moonlight plus warm orange from distant wreckage fires"
+              players:
+                - "AMY’S CRATE"
+              sfx:
+                - "DISTANT EXPLOSIONS"
+                - "INSECT HUM RISING"
+              vfx:
+                - "CG burning fragments crossing sky"
+              dialogue: []
+
+          - id: "A1_S1_B12"
+            time_range: "00:55-01:00"
+            duration_seconds: 5
+            action: >
+              AMY’s POV as the crate door hydraulic latch hisses and starts to
+              unlock, servo arms twitching into life.
+            shot:
+              type: "POV"
+              framing: "DOOR LATCH MECHANISM IN CLOSE-UP"
+              camera_movement: "Tiny servo-like tracking move"
+            composition:
+              theme: "Awakening in an alien world"
+              style: "Mechanical details fetishized, macro focus"
+              props:
+                - "Hydraulic piston"
+                - "Latch teeth"
+              location: "Inside crate, door side"
+              lighting: "Backlit leaks of misty moonlight through seam"
+              players:
+                - "AMY (POV)"
+              sfx:
+                - "HYDRAULIC HISS"
+                - "CLACKING METAL"
+              vfx:
+                - "Condensation drifting in the shaft of light"
+              dialogue: []
+
+          - id: "A1_S1_B13"
+            time_range: "01:00-01:05"
+            duration_seconds: 5
+            action: >
+              Exterior: crate door slams down into the mud, kicking up wet soil
+              and revealing a dark interior.
+            shot:
+              type: "MEDIUM"
+              framing: "CRATE DOOR FALLING TOWARD CAMERA"
+              camera_movement: "Quick tilt down following the door"
+            composition:
+              theme: "Portal opening"
+              style: "Shock-cut with mud splatter on lens"
+              props:
+                - "Heavy metal door"
+                - "Mud splash"
+              location: "Same jungle clearing"
+              lighting: "Sudden beam of interior light spilling out, silhouetting the doorway"
+              players:
+                - "N/A (AMY still inside)"
+              sfx:
+                - "HEAVY THUD"
+                - "MUD SPLATTER"
+              vfx:
+                - "Lens dirt and droplets"
+              dialogue: []
+
+          - id: "A1_S1_B14"
+            time_range: "01:05-01:10"
+            duration_seconds: 5
+            action: >
+              AMY steps out, finally seen in third person: a hulking, elegant
+              robotic ape, optics scanning the jungle.
+            shot:
+              type: "MEDIUM FULL-BODY"
+              framing: "AMY EMERGING FROM CRATE"
+              camera_movement: "Heroic low-angle push-in"
+            composition:
+              theme: "Birth of an unwilling explorer"
+              style: "Iconic sci-fi reveal, silhouette then detail"
+              props:
+                - "Crate behind her"
+                - "Broken parachute lines around feet"
+              location: "Clearing center"
+              lighting: "Backlit by crate light, edges rim-lit by moon"
+              players:
+                - "AMY – robotic ape"
+              sfx:
+                - "SERVOS WHIRRING"
+                - "METAL FOOTSTEPS IN MUD"
+              vfx:
+                - "Subtle eye-glow and HUD reflections on chrome"
+              dialogue: []
+
+          - id: "A1_S1_B15"
+            time_range: "01:10-01:15"
+            duration_seconds: 5
+            action: >
+              AMY’s optical HUD overlays the jungle, tagging trees, vines, heat
+              sources; the world looks like a corrupted AR interface.
+            shot:
+              type: "POV HUD"
+              framing: "JUNGLE MID-SHOT WITH OVERLAY"
+              camera_movement: "Slow, curious pan"
+            composition:
+              theme: "Machine trying to name the unnameable"
+              style: "Glitchy AR labels, partial misidentifications"
+              props:
+                - "Floating UI tags ('TREE?', 'UNKNOWN HEAT SOURCE')"
+              location: "Dense vegetation surrounding clearing"
+              lighting: "Dark jungle with occasional god-rays through canopy"
+              players:
+                - "AMY (POV HUD)"
+              sfx:
+                - "SOFT UI BEEPS"
+              vfx:
+                - "UI elements jitter, some fail to lock"
+              dialogue:
+                - speaker: "AMY (V.O.)"
+                  line: "Environment: unindexed. Language dataset: insufficient."
+
+          - id: "A1_S1_B16"
+            time_range: "01:15-01:20"
+            duration_seconds: 5
+            action: >
+              Close-up on AMY’s face as she hears distant human screams and the
+              low mechanical roar of something not natural.
+            shot:
+              type: "CLOSE-UP"
+              framing: "AMY’S FACE, EYES TRACKING OFFSCREEN"
+              camera_movement: "Tiny push-in to emphasize reaction"
+            composition:
+              theme: "Pulled between human and machine obligations"
+              style: "Reflections of fire and UI in her lenses"
+              props:
+                - "Water droplets on metal fur"
+              location: "Edge of clearing"
+              lighting: "Soft moonlight plus distant fire reflections"
+              players:
+                - "AMY"
+              sfx:
+                - "DISTANT HUMAN SCREAMS"
+                - "LOW INDUSTRIAL RUMBLE"
+              vfx:
+                - "Subtle eye-iris animations reacting to sound"
+              dialogue:
+                - speaker: "AMY (V.O.)"
+                  line: "Signal detected. Humans… and something else."
+
+          - id: "A1_S1_B17"
+            time_range: "01:20-01:25"
+            duration_seconds: 5
+            action: >
+              Wide shot as AMY turns toward the source of the sound; in the far
+              distance, through layers of trees, we glimpse the glow of the
+              crashed plane’s main wreck.
+            shot:
+              type: "WIDE"
+              framing: "AMY IN FOREGROUND, DISTANT FIRE IN DEEP BACKGROUND"
+              camera_movement: "Slow lateral move, parallax through trees"
+            composition:
+              theme: "First quest impulse"
+              style: "Layered depth, silhouetted trunks"
+              props:
+                - "Distant fire glow"
+                - "Hanging vines"
+              location: "Transition from clearing into deep jungle"
+              lighting: "Cool foreground, warm distant fire"
+              players:
+                - "AMY"
+              sfx:
+                - "FOREST NOISE builds"
+              vfx:
+                - "Heat shimmer above wreck fire"
+              dialogue: []
+
+          - id: "A1_S1_B18"
+            time_range: "01:25-01:30"
+            duration_seconds: 5
+            action: >
+              AMY steps into the darkness of the jungle toward the wreck, the
+              crate and clearing left behind; the camera lingers a beat on the
+              abandoned corporate logo.
+            shot:
+              type: "TRACKING SHOT"
+              framing: "AMY FROM BEHIND, MOVING INTO DENSE FOLIAGE"
+              camera_movement: "Steadycam following, slight sway"
+            composition:
+              theme: "Leaving ownership, entering wilderness"
+              style: "Long, moody exit shot into shadow"
+              props:
+                - "Crate with corporate stenciling left in frame"
+              location: "Jungle path beginning at clearing edge"
+              lighting: "Her silhouette swallowed by dark, only faint LEDs on her back"
+              players:
+                - "AMY"
+              sfx:
+                - "BRANCHES CRUNCHING"
+                - "INSECTS SWELLING IN MIX"
+              vfx:
+                - "Natural light only; subtle film grain"
+              dialogue:
+                - speaker: "AMY (V.O., almost to herself)"
+                  line: "Objective: follow the fire."

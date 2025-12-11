@@ -53,10 +53,44 @@ See `test_script.yaml` for the structure (acts → scenes → beats with shot/ac
 
 ## Workflow node IDs
 Default IDs assumed by the runner (adjust constants in `movie_runner.py` if your export differs):
-- Image: positive 6, negative 7, SaveImage 9
-- Video: positive 6, negative 7, latent 55 (expects an `image` input if available), SaveVideo 58
+- Image (Flux2): Positive 6, Negative 7, SaveImage 9, Noise 25. Optional character ref path: LoadImage 45 → VAEEncode 44 → ReferenceLatent 43 (auto-skipped if no ref image).
+- Video (Wan2.2 I2V): Positive 6, Negative 7, Latent 55 (start image from LoadImage 83), SaveVideo 58, LoadAudio 90 (silent fallback if none provided).
 
 ## Notes and troubleshooting
-- The runner copies the generated keyframe into `COMFY_INPUT_DIR` and passes the filename to the video latent node if it exposes an `image` input. If your video workflow lacks that input, it will animate from noise and print a warning—add a LoadImage/encode path or an `image` input to node 55.
+- The runner copies the generated keyframe into `COMFY_INPUT_DIR` and passes the filename to the video latent node if it exposes an `image` input. If your video workflow lacks that input, it will animate from noise and print a warning―add a LoadImage/encode path or an `image` input to node 55.
 - If the script hangs before image creation, ensure your ComfyUI server is up, the node IDs match your workflow JSON, and the required Python deps are installed.
 - For different workflows, update the node ID constants (top of `movie_runner.py`) or mirror the defaults in `.env`.
+
+## Current setup overview
+
+### Image workflow (`workflow_image_api.json`, Flux2)
+- Models: `diffusion_models/flux2_dev_fp8mixed.safetensors`, `vae/flux2-vae.safetensors`, `text_encoders/mistral_3_small_flux2_bf16.safetensors`
+- Nodes: Positive 6 / Negative 7 / Save 9 / Noise 25 / (optional) Ref Load 45 → Ref Encode 44 → Ref Cond 43
+- Behavior: per-beat seed jitter; character reference is skipped automatically if no image is available.
+
+### Video workflow (`workflow_video_api.json`, Wan 2.2 I2V)
+- Models: `diffusion_models/wan2.2_ti2v_5B_fp16.safetensors`, `vae/wan2.2_vae.safetensors`, `text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors`, `text_encoders/clip_l.safetensors`, `clip_vision/llava_llama3_vision.safetensors`
+- Nodes: Positive 6 / Negative 7 / Latent 55 (start image from LoadImage 83) / SaveVideo 58 / LoadAudio 90 (silent fallback if no audio provided)
+- Behavior: uses the generated keyframe as the start image; audio is muxed (per-beat `sfx`, global `--audio-file`, or generated TTS if enabled).
+
+### Repo layout (simplified)
+```
+root/
+  movie_runner.py
+  workflow_image_api.json
+  workflow_video_api.json
+  congo2_anime.yaml
+  players.yaml                # descriptions + optional ref images
+  ComfyUI/                    # your ComfyUI checkout (ignored by git)
+    models/
+      diffusion_models/flux2_dev_fp8mixed.safetensors
+      diffusion_models/wan2.2_ti2v_5B_fp16.safetensors
+      vae/flux2-vae.safetensors
+      vae/wan2.2_vae.safetensors
+      text_encoders/mistral_3_small_flux2_bf16.safetensors
+      text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors
+      text_encoders/clip_l.safetensors
+      clip_vision/llava_llama3_vision.safetensors
+    input/   # keyframes + audio copied here automatically
+    output/  # ComfyUI outputs
+```

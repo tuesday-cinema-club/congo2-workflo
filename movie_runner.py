@@ -5,33 +5,59 @@ import shutil
 import sys
 import time
 import uuid
+import random
+import base64
 from dataclasses import dataclass
 from typing import List, Optional, Dict, Any
 
 import urllib.request
 import urllib.parse
 from websocket import create_connection
-from dotenv import load_dotenv
 import yaml  # pip install pyyaml
+from dotenv import load_dotenv
 
 # -------------------------------------------------------------------
 # CONFIG
 # -------------------------------------------------------------------
 
+# Load .env early so all config constants see overrides
+load_dotenv()
+
 # Address of your running ComfyUI server
 SERVER_ADDRESS = os.getenv("COMFY_SERVER_ADDRESS", "127.0.0.1:8188")
 
 # Node IDs for the IMAGE workflow (from workflow_image_api.json, API format)
-IMAGE_POS_PROMPT_NODE = "6"   # CLIPTextEncode (positive)
-IMAGE_NEG_PROMPT_NODE = "7"   # CLIPTextEncode (negative)
-IMAGE_SAVE_NODE       = "9"   # SaveImage
+IMAGE_POS_PROMPT_NODE = os.getenv("IMAGE_POSITIVE_PROMPT_NODE", "6")
+IMAGE_NEG_PROMPT_NODE = os.getenv("IMAGE_NEGATIVE_PROMPT_NODE", "7")
+IMAGE_SAVE_NODE = os.getenv("IMAGE_SAVE_NODE", "9")
+IMAGE_NOISE_NODE = os.getenv("IMAGE_NOISE_NODE", "25")  # RandomNoise / seedable node
+IMAGE_REF_LOAD_NODE = os.getenv("IMAGE_REF_LOAD_NODE", "45")  # LoadImage for character ref
+IMAGE_REF_ENCODE_NODE = os.getenv("IMAGE_REF_ENCODE_NODE", "44")  # VAEEncode for ref
+IMAGE_REF_COND_NODE = os.getenv("IMAGE_REF_COND_NODE", "43")  # ReferenceLatent
 
 # Node IDs for the VIDEO workflow (from workflow_video_api.json, API format)
-VIDEO_POS_PROMPT_NODE = "6"    # CLIPTextEncode (positive)
-VIDEO_NEG_PROMPT_NODE = "7"    # CLIPTextEncode (negative)
-VIDEO_LATENT_NODE     = "55"   # Wan22ImageToVideoLatent (optional image input)
-VIDEO_OUTPUT_NODE     = "58"   # SaveVideo
-COMFY_INPUT_DIR       = os.getenv("COMFY_INPUT_DIR", os.path.join("ComfyUI", "input"))
+# Updated for Hunyuan I2V workflow defaults:
+VIDEO_POS_PROMPT_NODE = (
+    os.getenv("VIDEO_POSITIVE_PROMPT_NODE")
+    or os.getenv("VIDEO_POS_NODE")
+    or "6"
+)  # Wan CLIPTextEncode (positive)
+VIDEO_NEG_PROMPT_NODE = (
+    os.getenv("VIDEO_NEGATIVE_PROMPT_NODE")
+    or os.getenv("VIDEO_NEG_NODE")
+    or "7"
+)  # Wan CLIPTextEncode (negative)
+VIDEO_LATENT_NODE = os.getenv("VIDEO_LATENT_NODE", "55")  # Wan22ImageToVideoLatent (takes start_image)
+VIDEO_LOADIMAGE_NODE = os.getenv("VIDEO_LOADIMAGE_NODE", "83")  # LoadImage feeding the latent
+VIDEO_OUTPUT_NODE = os.getenv("VIDEO_OUTPUT_NODE", "58")  # SaveVideo/SaveWEBM
+VIDEO_AUDIO_NODE = os.getenv("VIDEO_AUDIO_NODE", "90")  # LoadAudio feeding CreateVideo (optional)
+# How strongly the vision encoder is interleaved into the text encoder (Hunyuan).
+# Higher values mean more weight on text vs image. Lower values avoid overlong token sequences.
+VIDEO_IMAGE_INTERLEAVE = int(os.getenv("VIDEO_IMAGE_INTERLEAVE", "1"))
+# Optional sampler/noise node IDs used for seeding variability
+VIDEO_SAMPLER_NODE = os.getenv("VIDEO_SAMPLER_NODE", "3")  # KSampler
+VIDEO_NOISE_NODE = os.getenv("VIDEO_NOISE_NODE", "")  # not used in Wan flow
+COMFY_INPUT_DIR = os.getenv("COMFY_INPUT_DIR", os.path.join("ComfyUI", "input"))
 
 DEFAULT_NEGATIVE = (
     "text, caption, logo, watermark, UI, interface, jpeg artifacts, blurry, low quality, "
@@ -97,31 +123,41 @@ class Script:
 # YAML PARSING
 # -------------------------------------------------------------------
 
-def load_player_definitions(path: str) -> Dict[str, str]:
-    """Load a shared player definition file (players.yaml).
-    Expected shape:
+def load_player_definitions(path: str) -> (Dict[str, str], Dict[str, str]):
+    """Load shared player definitions and optional reference images (players.yaml).
+    Supported shapes:
     players:
       Karen Ross: "ruthless TraviCom executive..."
-      Amy: "robotic ape with camera eye..."
-    If the file is missing or malformed, return an empty mapping.
+      Amy:
+        description: "robotic ape with camera eye..."
+        image: "refs/amy.png"
+    Returns (descriptions, images) both keyed by lowercase name.
     """
     if not os.path.isfile(path):
-        return {}
+        return {}, {}
     try:
         with open(path, "r", encoding="utf-8") as f:
             data = yaml.safe_load(f) or {}
     except Exception:
-        return {}
+        return {}, {}
 
     players = data.get("players") if isinstance(data, dict) else None
     if players is None:
         players = data if isinstance(data, dict) else {}
 
-    out: Dict[str, str] = {}
-    for name, desc in players.items():
+    descs: Dict[str, str] = {}
+    images: Dict[str, str] = {}
+    for name, val in players.items():
         key = str(name).strip().lower()
-        out[key] = str(desc).strip()
-    return out
+        if isinstance(val, dict):
+            desc = val.get("description") or val.get("desc") or ""
+            img = val.get("image")
+            descs[key] = str(desc).strip()
+            if img:
+                images[key] = str(img).strip()
+        else:
+            descs[key] = str(val).strip()
+    return descs, images
 
 
 def load_script_from_yaml(path: str) -> Script:
@@ -256,13 +292,16 @@ def load_script_from_yaml(path: str) -> Script:
 def _render_prompt_from_dict(beat: Dict[str, Any]) -> str:
     """Turn one beat dict into a strong, SD-friendly prompt string."""
     global_style = (
-        "cinematic 35mm film still, anamorphic lens, sharp subject focus, "
-        "rich contrast, rain mist in air, filmic grain, detailed textures, no text"
+        "cinematic anime film frame, painterly detail, sharp subject focus, "
+        "depth layering, volumetric light shafts, clean line art, subtle film grain, "
+        "no text, hard-light German expressionist black-and-white overlayer: stark shadows, "
+        "high contrast silhouettes, dramatic lighting shapes"
     )
     color_guard = (
-        "balanced color grade, natural skin and metal tones, red emergency strobes "
-        "against cool moonlight, no green wash, no monochrome"
+        "balanced color grade, natural skin and metal tones, controlled highlights, "
+        "no over-saturation, no green wash, no monochrome"
     )
+    motion_guard = "no motion blur, no ghosting, coherent limbs and faces, grounded perspective"
 
     shot_bits: List[str] = []
     shot = beat.get("shot") or {}
@@ -308,6 +347,7 @@ def _render_prompt_from_dict(beat: Dict[str, Any]) -> str:
             shot_desc,
             mood_desc,
             color_guard,
+            motion_guard,
             global_style,
         ]
         if x
@@ -343,10 +383,12 @@ def build_image_prompt(
         return f"{name} ({desc})" if desc else name
 
     players: List[str] = []
-    for p in scene.players:
-        players.append(describe_player(p.name, p.description))
+    # Prefer beat-specific players to avoid duplicating scene players/descriptions
     if beat.players:
         players.extend(describe_player(str(x), None) for x in beat.players)
+    else:
+        for p in scene.players:
+            players.append(describe_player(p.name, p.description))
     # de-duplicate while preserving order
     seen_players = set()
     players = [p for p in players if not (p in seen_players or seen_players.add(p))]
@@ -372,6 +414,60 @@ def build_image_prompt(
     if isinstance(sfx, list):
         sfx = ", ".join(str(x) for x in sfx)
 
+    # Deterministic per-beat style/shot modifiers to avoid repetitive frames
+    def _variation_tags(beat_id: str) -> str:
+        rng = random.Random(f"beat-var-{beat_id}")
+        camera_angles = [
+            "low-angle dramatic",
+            "high-angle lookout",
+            "Dutch tilt",
+            "over-the-shoulder",
+            "bird's-eye view",
+            "close-up push in",
+            "medium two-shot",
+            "wide establishing",
+            "profile tracking",
+            "rear follow cam",
+        ]
+        lenses = [
+            "24mm wide lens",
+            "28mm wide lens",
+            "35mm lens",
+            "50mm portrait lens",
+            "70mm telephoto lens",
+        ]
+        movements = [
+            "slow dolly left-to-right",
+            "slow dolly right-to-left",
+            "crane down",
+            "crane up reveal",
+            "steadicam walk-through",
+            "handheld jitter",
+            "locked-off tripod",
+        ]
+        palettes = [
+            "golden hour warmth",
+            "blue hour cool",
+            "neon rim light",
+            "hard noir contrast",
+            "soft overcast",
+        ]
+        time_of_day = [
+            "night with practicals",
+            "dawn mist",
+            "midday harsh sun",
+            "late afternoon glow",
+            "rainy evening streets",
+        ]
+        picks = [
+            rng.choice(camera_angles),
+            rng.choice(lenses),
+            rng.choice(movements),
+            rng.choice(palettes),
+            rng.choice(time_of_day),
+        ]
+        return ", ".join(picks)
+
     beat_dict = {
         "id": beat.id,
         "theme": theme,
@@ -387,18 +483,90 @@ def build_image_prompt(
         "dialogue": beat.dialogue,
     }
 
-    return _render_prompt_from_dict(beat_dict)
+    base_prompt = _render_prompt_from_dict(beat_dict)
+    variation = _variation_tags(beat.id or act.name)
+    return f"{base_prompt}, distinct composition: {variation}"
 
 
 # -------------------------------------------------------------------
 # COMFYUI API HELPERS
 # -------------------------------------------------------------------
 
+def ensure_comfy_available(address: str, timeout: float = 3.0) -> None:
+    """Fail fast with a clear message if ComfyUI is not reachable."""
+    url = f"http://{address}/system_stats"
+    try:
+        with urllib.request.urlopen(url, timeout=timeout) as resp:
+            resp.read(64)
+    except Exception as exc:
+        raise ConnectionError(
+            f"Could not reach ComfyUI at {address}. "
+            f"Start the server (e.g., `python ComfyUI/main.py --listen --port {address.split(':')[-1]}`) "
+            f"or set COMFY_SERVER_ADDRESS to the correct host:port. "
+            f"Original error: {exc}"
+        ) from exc
+
+
+def synthesize_audio(text: str, out_path: str, voice: Optional[str] = None, rate: int = 180) -> bool:
+    """
+    Simple TTS using pyttsx3 (offline, Windows SAPI-friendly).
+    Returns True on success, False otherwise.
+    """
+    try:
+        import pyttsx3  # type: ignore
+    except Exception:
+        return False
+
+
+def ensure_placeholder_image(path: str) -> str:
+    """Create a tiny valid PNG placeholder if it doesn't exist."""
+    if os.path.isfile(path):
+        return path
+    png_bytes = base64.b64decode(
+        b"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAucB9W4ybdkAAAAASUVORK5CYII="
+    )
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    with open(path, "wb") as f:
+        f.write(png_bytes)
+    return path
+
+
+def ensure_silence_wav(path: str, seconds: float = 1.0, sample_rate: int = 44100) -> str:
+    """Create a small silent WAV if missing to satisfy audio inputs."""
+    if os.path.isfile(path):
+        return path
+    import wave
+    import struct
+
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    n_frames = int(sample_rate * seconds)
+    with wave.open(path, "w") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(sample_rate)
+        silence_frame = struct.pack("<h", 0)
+        wf.writeframes(silence_frame * n_frames)
+    return path
+    try:
+        engine = pyttsx3.init()
+        if voice:
+            engine.setProperty("voice", voice)
+        engine.setProperty("rate", rate)
+        engine.save_to_file(text, out_path)
+        engine.runAndWait()
+        return os.path.isfile(out_path)
+    except Exception:
+        return False
+
+
 def _http_post_json(url: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(url, data=data)
-    with urllib.request.urlopen(req) as resp:
-        return json.loads(resp.read())
+    try:
+        with urllib.request.urlopen(req) as resp:
+            return json.loads(resp.read())
+    except Exception as exc:
+        raise ConnectionError(f"Failed to POST to {url}. Is ComfyUI running at {SERVER_ADDRESS}? {exc}") from exc
 
 
 def queue_prompt(prompt_workflow: Dict[str, Any], client_id: str) -> str:
@@ -459,6 +627,7 @@ def run_image_workflow(
     output_dir: str,
     beat_id: str,
     negative_prompt: str = DEFAULT_NEGATIVE,
+    character_image: Optional[str] = None,
 ) -> str:
     """Run the image workflow once for a beat and save the PNG to output_dir."""
     with open(workflow_path, "r", encoding="utf-8") as f:
@@ -470,14 +639,56 @@ def run_image_workflow(
             f"Make sure you used 'Save (API format)' in ComfyUI."
         )
 
-    if IMAGE_POS_PROMPT_NODE not in workflow:
+    pos_node_id = IMAGE_POS_PROMPT_NODE if IMAGE_POS_PROMPT_NODE in workflow else None
+    if pos_node_id is None:
         raise KeyError(
             f"Positive prompt node id {IMAGE_POS_PROMPT_NODE} not found in workflow."
         )
 
-    workflow[IMAGE_POS_PROMPT_NODE]["inputs"]["text"] = prompt_text
-    if IMAGE_NEG_PROMPT_NODE in workflow:
-        workflow[IMAGE_NEG_PROMPT_NODE]["inputs"]["text"] = negative_prompt
+    workflow[pos_node_id]["inputs"]["text"] = prompt_text
+    neg_node_id = IMAGE_NEG_PROMPT_NODE if IMAGE_NEG_PROMPT_NODE in workflow else None
+    if neg_node_id:
+        workflow[neg_node_id]["inputs"]["text"] = negative_prompt
+
+    # Jitter seeds per beat so compositions vary
+    seed_val = abs(hash(f"img-{beat_id}-{time.time()}")) % 2**31
+    # Sampler seed (if present)
+    sampler_node = workflow.get("3")
+    if sampler_node and isinstance(sampler_node.get("inputs"), dict) and "seed" in sampler_node["inputs"]:
+        sampler_node["inputs"]["seed"] = seed_val
+    # RandomNoise / noise node
+    noise_node = workflow.get(IMAGE_NOISE_NODE)
+    if noise_node and isinstance(noise_node.get("inputs"), dict):
+        key = "noise_seed" if "noise_seed" in noise_node["inputs"] else "seed"
+        if key in noise_node["inputs"]:
+            noise_node["inputs"][key] = seed_val
+
+    # Wire a character reference image; otherwise fall back to plain conditioning
+    def disable_ref_nodes():
+        guider = workflow.get("22")
+        if guider and isinstance(guider.get("inputs"), dict):
+            guider["inputs"]["conditioning"] = ["26", 0]
+        # Remove ref nodes to avoid validation errors
+        for nid in (IMAGE_REF_COND_NODE, IMAGE_REF_ENCODE_NODE, IMAGE_REF_LOAD_NODE):
+            workflow.pop(nid, None)
+
+    if character_image and os.path.isfile(character_image):
+        try:
+            if COMFY_INPUT_DIR:
+                os.makedirs(COMFY_INPUT_DIR, exist_ok=True)
+                dest = os.path.join(COMFY_INPUT_DIR, os.path.basename(character_image))
+                if os.path.abspath(character_image) != os.path.abspath(dest) or not os.path.isfile(dest):
+                    shutil.copyfile(character_image, dest)
+                image_for_workflow = os.path.basename(dest)
+            else:
+                image_for_workflow = character_image
+            load_ref = workflow.get(IMAGE_REF_LOAD_NODE)
+            if load_ref and isinstance(load_ref.get("inputs"), dict):
+                load_ref["inputs"]["image"] = image_for_workflow
+        except Exception:
+            disable_ref_nodes()
+    else:
+        disable_ref_nodes()
 
     client_id = str(uuid.uuid4())
 
@@ -530,8 +741,25 @@ def run_video_workflow(
     negative_prompt: str = DEFAULT_NEGATIVE,
     copy_frame_to_input: bool = True,
     duration_seconds: Optional[int] = None,
+    audio_path: Optional[str] = None,
 ) -> str:
     """Run the video workflow once for a beat and save the MP4 to output_dir."""
+    # Hunyuan text encoder is sensitive to long prompts; truncate by clauses then by length
+    def _shorten_prompt(text: str, max_chars: int = 100, max_parts: int = 3) -> str:
+        flat = " ".join(text.split())
+        parts = [p.strip() for p in flat.split(",") if p.strip()]
+        out_parts = []
+        total = 0
+        for p in parts[:max_parts]:
+            if total + len(p) + 2 > max_chars:
+                break
+            out_parts.append(p)
+            total += len(p) + 2
+        short = ", ".join(out_parts) if out_parts else flat[:max_chars]
+        return short[:max_chars]
+
+    safe_prompt = _shorten_prompt(prompt_text)
+
     with open(workflow_path, "r", encoding="utf-8") as f:
         workflow = json.load(f)
 
@@ -541,14 +769,48 @@ def run_video_workflow(
             f"Make sure you used 'Save (API format)' in ComfyUI."
         )
 
-    if VIDEO_POS_PROMPT_NODE not in workflow:
+    pos_node_id = VIDEO_POS_PROMPT_NODE if VIDEO_POS_PROMPT_NODE in workflow else ("80" if "80" in workflow else None)
+    if pos_node_id is None:
         raise KeyError(
             f"Video positive prompt node id {VIDEO_POS_PROMPT_NODE} not found in workflow."
         )
 
-    workflow[VIDEO_POS_PROMPT_NODE]["inputs"]["text"] = prompt_text
-    if VIDEO_NEG_PROMPT_NODE in workflow:
-        workflow[VIDEO_NEG_PROMPT_NODE]["inputs"]["text"] = negative_prompt
+    # Give each clip a fresh seed so videos don't all look identical
+    seed_val = abs(hash(f"{beat_id}-{time.time()}")) % 2**31
+    # KSampler seed (old workflows)
+    sampler_node = workflow.get("3")
+    if sampler_node and isinstance(sampler_node.get("inputs"), dict) and "seed" in sampler_node["inputs"]:
+        sampler_node["inputs"]["seed"] = seed_val
+    # SamplerCustomAdvanced / RandomNoise (Hunyuan workflow)
+    adv_sampler = workflow.get(VIDEO_SAMPLER_NODE)
+    if adv_sampler and isinstance(adv_sampler.get("inputs"), dict) and "seed" in adv_sampler["inputs"]:
+        adv_sampler["inputs"]["seed"] = seed_val
+    noise_node = workflow.get(VIDEO_NOISE_NODE)
+    if noise_node and isinstance(noise_node.get("inputs"), dict):
+        key = "noise_seed" if "noise_seed" in noise_node["inputs"] else "seed"
+        if key in noise_node["inputs"]:
+            noise_node["inputs"][key] = seed_val
+
+    # Inject prompt text into the positive node; Hunyuan text encoder uses 'text' (and accepts 'prompt' as alias)
+    pos_inputs = workflow[pos_node_id].setdefault("inputs", {})
+    pos_inputs["text"] = safe_prompt
+    # Some builds expect 'prompt' instead of 'text'
+    pos_inputs["prompt"] = safe_prompt
+    if "image_interleave" in pos_inputs:
+        try:
+            pos_inputs["image_interleave"] = max(1, int(VIDEO_IMAGE_INTERLEAVE))
+        except Exception:
+            pass
+    if "max_new_tokens" in pos_inputs:
+        try:
+            # keep within a sane range to avoid over-long sequences
+            pos_inputs["max_new_tokens"] = min(96, int(pos_inputs["max_new_tokens"]))
+        except Exception:
+            pass
+
+    neg_node_id = VIDEO_NEG_PROMPT_NODE if (VIDEO_NEG_PROMPT_NODE and VIDEO_NEG_PROMPT_NODE in workflow) else None
+    if neg_node_id:
+        workflow[neg_node_id]["inputs"]["text"] = negative_prompt
 
     # Ensure the first frame is available where Comfy expects it
     image_for_workflow = os.path.abspath(first_frame_path)
@@ -557,14 +819,31 @@ def run_video_workflow(
         dest = os.path.join(COMFY_INPUT_DIR, os.path.basename(first_frame_path))
         if os.path.abspath(first_frame_path) != os.path.abspath(dest) or not os.path.isfile(dest):
             shutil.copyfile(first_frame_path, dest)
-        image_for_workflow = os.path.basename(dest)  # Wan expects filenames from the input folder
+        image_for_workflow = os.path.basename(dest)  # pass basename to LoadImage
 
-    latent_node = workflow.get(VIDEO_LATENT_NODE)
+    # If a LoadImage node exists (common in Hunyuan I2V), update it to point to the keyframe
+    load_image_node_id = (
+        VIDEO_LOADIMAGE_NODE
+        if VIDEO_LOADIMAGE_NODE in workflow
+        else ("83" if "83" in workflow else None)
+    )
+    load_image_node = workflow.get(load_image_node_id) if load_image_node_id else None
+    if load_image_node and isinstance(load_image_node.get("inputs"), dict):
+        load_image_node["inputs"]["image"] = image_for_workflow
+        # Some LoadImage variants also use 'choose file type'
+        if "choose file type" in load_image_node["inputs"]:
+            load_image_node["inputs"]["choose file type"] = "image"
+
+    latent_node_id = VIDEO_LATENT_NODE if VIDEO_LATENT_NODE in workflow else ("78" if "78" in workflow else None)
+    latent_node = workflow.get(latent_node_id) if latent_node_id else None
     if latent_node and isinstance(latent_node.get("inputs"), dict):
         if "image" in latent_node["inputs"]:
             latent_node["inputs"]["image"] = image_for_workflow
-        else:
-            print("Warning: video latent node has no 'image' input; animating from noise.")
+        if "start_image" in latent_node["inputs"]:
+            if load_image_node_id and load_image_node_id in workflow:
+                latent_node["inputs"]["start_image"] = [load_image_node_id, 0]
+            else:
+                latent_node["inputs"]["start_image"] = image_for_workflow
         # Adjust length based on beat duration if provided
         if duration_seconds is not None:
             # Try to get fps from the CreateVideo node (57) if present, else default
@@ -574,15 +853,54 @@ def run_video_workflow(
                 fps = int(create_video_node["inputs"].get("fps", fps))
             try:
                 frames = max(1, int(duration_seconds) * fps)
+                # Keep length modest for 8GB cards
+                frames = min(frames, 8 * fps)
                 if "length" in latent_node["inputs"]:
                     latent_node["inputs"]["length"] = frames
             except Exception:
                 pass
 
+    # If a LoadAudio node exists, wire in provided audio or fallback silence
+    audio_node_id = VIDEO_AUDIO_NODE if VIDEO_AUDIO_NODE in workflow else None
+    if audio_node_id:
+        try:
+            if not audio_path:
+                silent_dir = COMFY_INPUT_DIR or "."
+                audio_path = ensure_silence_wav(os.path.join(silent_dir, "audio_silence.wav"))
+            os.makedirs(COMFY_INPUT_DIR, exist_ok=True)
+            audio_dest = os.path.join(COMFY_INPUT_DIR, os.path.basename(audio_path))
+            if os.path.abspath(audio_path) != os.path.abspath(audio_dest) or not os.path.isfile(audio_dest):
+                shutil.copyfile(audio_path, audio_dest)
+            audio_node = workflow.get(audio_node_id)
+            if audio_node and isinstance(audio_node.get("inputs"), dict):
+                audio_node["inputs"]["audio"] = os.path.basename(audio_dest)
+        except Exception:
+            pass
+
     client_id = str(uuid.uuid4())
 
+    # Encourage motion/camera movement in the video prompt
+    rng = random.Random(f"vid-move-{beat_id}")
+    motion_tags = [
+        "dynamic camera pan and tilt",
+        "parallax background drift",
+        "cloth and hair react to wind",
+        "subject walks through frame",
+        "slow orbiting camera move",
+        "depth-filled tracking shot",
+        "environmental effects in motion",
+    ]
+    move_prompt = f"{prompt_text}, animated sequence, {rng.choice(motion_tags)}"
+
     print(f"\n=== Running VIDEO for beat {beat_id} ===")
-    print(f"Prompt:\n{prompt_text}\n")
+    print(f"Prompt:\n{move_prompt}\n")
+
+    # Inject the motion-enhanced prompt into the graph
+    pos_inputs = workflow[pos_node_id].setdefault("inputs", {})
+    pos_inputs["text"] = move_prompt
+    pos_inputs["prompt"] = move_prompt
+    if neg_node_id:
+        workflow[neg_node_id]["inputs"]["text"] = negative_prompt
 
     prompt_id = queue_prompt(workflow, client_id)
     start_time = time.time()
@@ -624,14 +942,19 @@ def run_video_workflow(
         )
 
     vid_info = file_list[0]
+    remote_filename = vid_info.get("filename") or vid_info.get("name")
+    if not remote_filename:
+        raise RuntimeError("Video output missing filename.")
     vid_bytes = fetch_file(
-        filename=vid_info.get("filename") or vid_info.get("name"),
+        filename=remote_filename,
         subfolder=vid_info.get("subfolder", ""),
         folder_type=vid_info.get("type", "output"),
     )
 
     os.makedirs(output_dir, exist_ok=True)
-    local_name = f"beat_{beat_id}_clip.mp4"
+    _, ext = os.path.splitext(remote_filename)
+    local_ext = ext or ".mp4"
+    local_name = f"beat_{beat_id}_clip{local_ext}"
     local_path = os.path.join(output_dir, local_name)
     with open(local_path, "wb") as f:
         f.write(vid_bytes)
@@ -645,8 +968,6 @@ def run_video_workflow(
 # -------------------------------------------------------------------
 
 def main():
-    load_dotenv()  # optional .env support
-
     parser = argparse.ArgumentParser(description="ComfyUI movie runner (image + video test)")
     parser.add_argument(
         "--script",
@@ -673,6 +994,26 @@ def main():
         default=None,
         help="Where to write a JSON manifest of rendered beats (default: <output-dir>/render_manifest.json).",
     )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Skip beats that already have outputs in the output directory; continue where a previous run left off.",
+    )
+    parser.add_argument(
+        "--auto-duration",
+        action="store_true",
+        help="Override uniform durations by auto-jittering per beat to keep clips varied and GPU-friendly.",
+    )
+    parser.add_argument(
+        "--audio-file",
+        default=None,
+        help="Optional path to an audio file to mux into every clip (or leave None to rely on per-beat sfx paths).",
+    )
+    parser.add_argument(
+        "--generate-audio",
+        action="store_true",
+        help="Auto-generate simple narration audio per beat (pyttsx3 required). Uses beat dialogue or prompt text.",
+    )
 
     args = parser.parse_args()
 
@@ -689,13 +1030,19 @@ def main():
         sys.exit(1)
 
     try:
+        ensure_comfy_available(SERVER_ADDRESS)
+    except Exception as e:
+        print(e)
+        sys.exit(1)
+
+    try:
         script = load_script_from_yaml(args.script)
     except Exception as e:
         print(f"Failed to load YAML script: {e}")
         sys.exit(1)
 
     players_path = os.getenv("PLAYERS_PATH", "players.yaml")
-    player_definitions = load_player_definitions(players_path)
+    player_definitions, player_images = load_player_definitions(players_path)
     if player_definitions:
         print(f"Loaded {len(player_definitions)} player definitions from {players_path}")
         script.player_definitions = player_definitions
@@ -711,6 +1058,69 @@ def main():
     os.makedirs(args.output_dir, exist_ok=True)
     manifest_path = args.manifest or os.path.join(args.output_dir, "render_manifest.json")
     manifest: List[Dict[str, Any]] = []
+    manifest_index: Dict[str, Dict[str, Any]] = {}
+
+    # Load existing manifest if resuming
+    if args.resume and os.path.isfile(manifest_path):
+        try:
+            with open(manifest_path, "r", encoding="utf-8") as f:
+                existing = json.load(f) or []
+            if isinstance(existing, list):
+                for entry in existing:
+                    beat_id = entry.get("beat")
+                    if beat_id:
+                        manifest_index[beat_id] = entry
+                manifest = list(manifest_index.values())
+                print(f"Resume enabled: loaded {len(manifest)} entries from manifest.")
+        except Exception as e:
+            print(f"Warning: could not load existing manifest for resume: {e}")
+
+    # Helper to auto-jitter durations when requested or when all beats are identical
+    def derive_duration(beat: Beat) -> Optional[int]:
+        base = beat.duration_seconds
+        if args.auto_duration or base is None:
+            # Hash beat id to a duration between 3 and 8 seconds (GPU-safe)
+            rng = random.Random(f"dur-{beat.id}")
+            return int(rng.uniform(3.0, 8.0))
+        return base
+
+    def choose_character_image(beat: Beat, scene: Scene) -> Optional[str]:
+        # Prefer beat-level player images, then scene player images
+        def lookup(name: str) -> Optional[str]:
+            key = name.split("(")[0].strip().lower()
+            return player_images.get(key)
+
+        if beat.players:
+            for p in beat.players:
+                img = lookup(str(p))
+                if img and os.path.isfile(img):
+                    return img
+        for p in scene.players:
+            img = lookup(p.name)
+            if img and os.path.isfile(img):
+                return img
+        return None
+
+    def select_audio(beat: Beat, prompt_text: str) -> Optional[str]:
+        # Prefer per-beat sfx if it points to a file; else use CLI audio_file
+        sfx_path = None
+        if beat.sfx and isinstance(beat.sfx, str) and os.path.isfile(beat.sfx):
+            sfx_path = beat.sfx
+        chosen = sfx_path or args.audio_file
+
+        # If generation requested and no file chosen, synthesize quick narration
+        if args.generate_audio and not chosen:
+            text_for_audio = (
+                beat.dialogue
+                or beat.action
+                or prompt_text
+            )
+            if text_for_audio:
+                audio_out = os.path.join(args.output_dir, f"beat_{beat.id}_audio.wav")
+                ok = synthesize_audio(text_for_audio[:280], audio_out)
+                if ok:
+                    chosen = audio_out
+        return chosen
 
     for act in script.acts:
         print(f"\n=== Act: {act.name} ===")
@@ -722,57 +1132,87 @@ def main():
                     script, act, scene, beat, player_defs=player_definitions
                 )
 
-                try:
-                    frame_path = run_image_workflow(
-                        workflow_path=args.image_workflow,
-                        prompt_text=prompt_text,
-                        output_dir=args.output_dir,
-                        beat_id=beat.id or "beat",
-                    )
-                except Exception as e:
-                    print(f"❌ Error during image generation for {beat.id}: {e}")
-                    manifest.append(
-                        {
+                beat_id = beat.id or "beat"
+                frame_path = os.path.join(args.output_dir, f"beat_{beat_id}_keyframe.png")
+                clip_base = os.path.join(args.output_dir, f"beat_{beat_id}_clip")
+                existing_clip = None
+                for ext in [".mp4", ".webm", ".webp"]:
+                    candidate = f"{clip_base}{ext}"
+                    if os.path.isfile(candidate):
+                        existing_clip = candidate
+                        break
+                clip_path = existing_clip or f"{clip_base}.mp4"
+
+                # Skip if clip already exists and resume enabled
+                if args.resume and existing_clip:
+                    print(f"Resume: clip already exists for {beat_id}, skipping.")
+                    manifest_index[beat_id] = {
+                        "beat": beat.id,
+                        "act": act.name,
+                        "scene": scene.name,
+                        "status": "ok",
+                        "frame": frame_path if os.path.isfile(frame_path) else None,
+                        "clip": existing_clip,
+                    }
+                    continue
+
+                # Use existing frame if present
+                frame_ready = os.path.isfile(frame_path)
+                if not frame_ready:
+                    try:
+                        frame_path = run_image_workflow(
+                            workflow_path=args.image_workflow,
+                            prompt_text=prompt_text,
+                            output_dir=args.output_dir,
+                            beat_id=beat_id,
+                            character_image=choose_character_image(beat, scene),
+                        )
+                        frame_ready = True
+                    except Exception as e:
+                        print(f"❌ Error during image generation for {beat.id}: {e}")
+                        manifest_index[beat_id] = {
                             "beat": beat.id,
                             "act": act.name,
                             "scene": scene.name,
                             "status": "image_failed",
                             "error": str(e),
                         }
-                    )
-                    continue
+                        continue
+                else:
+                    print(f"Resume: using existing frame for {beat_id}: {frame_path}")
 
+                # Run video if needed
                 try:
                     clip_path = run_video_workflow(
                         workflow_path=args.video_workflow,
                         prompt_text=prompt_text,
                         first_frame_path=frame_path,
                         output_dir=args.output_dir,
-                        beat_id=beat.id or "beat",
-                        duration_seconds=beat.duration_seconds,
+                        beat_id=beat_id,
+                        duration_seconds=derive_duration(beat),
+                        audio_path=select_audio(beat, prompt_text),
                     )
-                    manifest.append(
-                        {
-                            "beat": beat.id,
-                            "act": act.name,
-                            "scene": scene.name,
-                            "status": "ok",
-                            "frame": frame_path,
-                            "clip": clip_path,
-                        }
-                    )
+                    manifest_index[beat_id] = {
+                        "beat": beat.id,
+                        "act": act.name,
+                        "scene": scene.name,
+                        "status": "ok",
+                        "frame": frame_path if frame_ready else None,
+                        "clip": clip_path,
+                    }
                 except Exception as e:
                     print(f"❌ Error during video generation for {beat.id}: {e}")
-                    manifest.append(
-                        {
-                            "beat": beat.id,
-                            "act": act.name,
-                            "scene": scene.name,
-                            "status": "video_failed",
-                            "frame": frame_path,
-                            "error": str(e),
-                        }
-                    )
+                    manifest_index[beat_id] = {
+                        "beat": beat.id,
+                        "act": act.name,
+                        "scene": scene.name,
+                        "status": "video_failed",
+                        "frame": frame_path if frame_ready else None,
+                        "error": str(e),
+                    }
+
+    # Flush manifest from index to list to avoid duplicates
+    manifest = list(manifest_index.values())
 
     try:
         with open(manifest_path, "w", encoding="utf-8") as f:

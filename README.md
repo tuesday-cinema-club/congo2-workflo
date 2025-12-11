@@ -22,6 +22,7 @@ COMFY_SERVER_ADDRESS=127.0.0.1:8188
 IMAGE_WORKFLOW_PATH=workflow_image_api.json
 VIDEO_WORKFLOW_PATH=workflow_video_api.json
 COMFY_INPUT_DIR=ComfyUI/input  # where keyframes get copied for video input
+PLAYERS_PATH=players.yaml      # shared character definitions for prompts
 ```
 
 ### Where to place files in ComfyUI
@@ -48,7 +49,7 @@ Outputs per beat:
 - Manifest: `movie_output/render_manifest.json` (one entry per beat with status/paths)
 
 ## Script format
-See `test_script.yaml` for the structure (acts → scenes → beats with shot/action/location/lighting/props/players/sfx/vfx/dialogue). The prompt builder in `movie_runner.py` constructs a Stable Diffusion–friendly string from these fields.
+See `test_script.yaml` for the structure (acts → scenes → beats with shot/action/location/lighting/props/players/sfx/vfx/dialogue). The prompt builder in `movie_runner.py` constructs a Stable Diffusion–friendly string from these fields. If you provide a `players.yaml` mapping of names to descriptions, those shared definitions are used whenever a player appears (unless a scene/beat already supplies its own description).
 
 ## Workflow node IDs
 Default IDs assumed by the runner (adjust constants in `movie_runner.py` if your export differs):

@@ -36,7 +36,7 @@ COMFY_INPUT_DIR       = os.getenv("COMFY_INPUT_DIR", os.path.join("ComfyUI", "in
 DEFAULT_NEGATIVE = (
     "text, caption, logo, watermark, UI, interface, jpeg artifacts, blurry, low quality, "
     "oversaturated, extra limbs, deformed hands, distorted faces, duplicate heads, low detail, "
-    "noisy background"
+    "noisy background, monochrome, green tint, color cast, mushy motion, warped anatomy"
 )
 
 
@@ -53,11 +53,18 @@ class Player:
 @dataclass
 class Beat:
     id: str
-    shot: str
+    shot: Any
     action: str
+    duration_seconds: Optional[int] = None
     sfx: Optional[str] = None
     vfx: Optional[str] = None
     dialogue: Optional[str] = None
+    style: Optional[str] = None
+    lighting: Optional[str] = None
+    location: Optional[str] = None
+    theme: Optional[str] = None
+    props: Optional[List[str]] = None
+    players: Optional[List[str]] = None
 
 
 @dataclass
@@ -82,57 +89,162 @@ class Script:
     title: str
     theme: Optional[str]
     acts: List[Act]
+    # Optional shared player definitions (lowercased name -> description)
+    player_definitions: Dict[str, str] = None
 
 
 # -------------------------------------------------------------------
 # YAML PARSING
 # -------------------------------------------------------------------
 
+def load_player_definitions(path: str) -> Dict[str, str]:
+    """Load a shared player definition file (players.yaml).
+    Expected shape:
+    players:
+      Karen Ross: "ruthless TraviCom executive..."
+      Amy: "robotic ape with camera eye..."
+    If the file is missing or malformed, return an empty mapping.
+    """
+    if not os.path.isfile(path):
+        return {}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+    except Exception:
+        return {}
+
+    players = data.get("players") if isinstance(data, dict) else None
+    if players is None:
+        players = data if isinstance(data, dict) else {}
+
+    out: Dict[str, str] = {}
+    for name, desc in players.items():
+        key = str(name).strip().lower()
+        out[key] = str(desc).strip()
+    return out
+
+
 def load_script_from_yaml(path: str) -> Script:
-    """Load the movie script YAML into our dataclasses."""
+    """Load the movie script YAML into our dataclasses.
+    Supports the simple test_script format and the richer congo-style format.
+    """
     with open(path, "r", encoding="utf-8") as f:
         data = yaml.safe_load(f)
 
+    def _list_of_strings(val: Any) -> List[str]:
+        """Normalize any list-or-string field into a list of strings."""
+        if not val:
+            return []
+        if isinstance(val, list):
+            out: List[str] = []
+            for item in val:
+                if isinstance(item, dict):
+                    name = item.get("name") or item.get("id") or item.get("description")
+                    out.append(str(name or item))
+                else:
+                    out.append(str(item))
+            return out
+        return [str(val)]
+
+    title = data.get("title", "Untitled Film")
+    theme = data.get("theme") or data.get("global_theme")
+
     acts: List[Act] = []
     for act_data in data.get("acts", []):
+        act_name = act_data.get("name") or act_data.get("title") or act_data.get("id", "Untitled Act")
         scenes: List[Scene] = []
         for scene_data in act_data.get("scenes", []):
-            players = [
-                Player(
-                    name=p.get("name", "Unknown"),
-                    description=p.get("description", "")
-                )
+            scene_name = scene_data.get("name", "Untitled Scene")
+            scene_location = scene_data.get("location", "")
+            scene_style = scene_data.get("style")
+            scene_lighting = scene_data.get("lighting")
+            scene_props = scene_data.get("props", []) or []
+            scene_players: List[Player] = [
+                Player(name=p.get("name", "Unknown"), description=p.get("description", ""))
                 for p in scene_data.get("players", [])
             ]
 
-            beats = [
-                Beat(
-                    id=b.get("id", ""),
-                    shot=b.get("shot", ""),
-                    action=b.get("action", ""),
-                    sfx=b.get("sfx"),
-                    vfx=b.get("vfx"),
-                    dialogue=b.get("dialogue"),
+            beats: List[Beat] = []
+            for beat_data in scene_data.get("beats", []):
+                comp = beat_data.get("composition", {}) or {}
+                # seed scene props/players/lighting from composition if scene lacks them
+                if not scene_props and comp.get("props"):
+                    scene_props = list(comp.get("props") or [])
+                if not scene_players and comp.get("players"):
+                    scene_players = [Player(name=str(p), description="") for p in comp.get("players")]
+                if not scene_lighting and comp.get("lighting"):
+                    scene_lighting = comp.get("lighting")
+                if not scene_style and comp.get("style"):
+                    scene_style = comp.get("style")
+                if scene_location == "" and comp.get("location"):
+                    scene_location = comp.get("location")
+
+                shot = beat_data.get("shot", "")
+                action = beat_data.get("action", "")
+                beat_theme = beat_data.get("theme") or comp.get("theme")
+                beat_style = beat_data.get("style") or comp.get("style")
+                beat_lighting = beat_data.get("lighting") or comp.get("lighting")
+                beat_location = beat_data.get("location") or comp.get("location")
+                beat_props = _list_of_strings(beat_data.get("props") or comp.get("props"))
+                beat_players = _list_of_strings(beat_data.get("players") or comp.get("players"))
+                duration_val = beat_data.get("duration_seconds")
+                try:
+                    duration_val = int(duration_val) if duration_val is not None else None
+                except Exception:
+                    duration_val = None
+
+                sfx_val = beat_data.get("sfx", comp.get("sfx"))
+                vfx_val = beat_data.get("vfx", comp.get("vfx"))
+
+                dialogue_val = beat_data.get("dialogue") or comp.get("dialogue")
+                if isinstance(dialogue_val, list):
+                    # list of {speaker, line}
+                    parts = []
+                    for d in dialogue_val:
+                        if isinstance(d, dict):
+                            speaker = d.get("speaker")
+                            line = d.get("line")
+                            if speaker and line:
+                                parts.append(f"{speaker}: {line}")
+                            elif line:
+                                parts.append(str(line))
+                        else:
+                            parts.append(str(d))
+                    dialogue_val = "; ".join(parts)
+
+                beat = Beat(
+                    id=beat_data.get("id", ""),
+                    shot=shot,
+                    action=action,
+                    duration_seconds=duration_val,
+                    sfx=sfx_val,
+                    vfx=vfx_val,
+                    dialogue=dialogue_val,
+                    style=beat_style,
+                    lighting=beat_lighting,
+                    location=beat_location,
+                    theme=beat_theme,
+                    props=beat_props or None,
+                    players=beat_players or None,
                 )
-                for b in scene_data.get("beats", [])
-            ]
+                beats.append(beat)
 
             scene = Scene(
-                name=scene_data.get("name", "Untitled Scene"),
-                location=scene_data.get("location", ""),
-                style=scene_data.get("style"),
-                lighting=scene_data.get("lighting"),
-                props=scene_data.get("props", []) or [],
-                players=players,
+                name=scene_name,
+                location=scene_location,
+                style=scene_style,
+                lighting=scene_lighting,
+                props=scene_props or [],
+                players=scene_players or [],
                 beats=beats,
             )
             scenes.append(scene)
 
-        acts.append(Act(name=act_data.get("name", "Untitled Act"), scenes=scenes))
+        acts.append(Act(name=act_name, scenes=scenes))
 
     return Script(
-        title=data.get("title", "Untitled Film"),
-        theme=data.get("theme"),
+        title=title,
+        theme=theme,
         acts=acts,
     )
 
@@ -144,9 +256,12 @@ def load_script_from_yaml(path: str) -> Script:
 def _render_prompt_from_dict(beat: Dict[str, Any]) -> str:
     """Turn one beat dict into a strong, SD-friendly prompt string."""
     global_style = (
-        "black-and-green VHS jungle cyberpunk, 1990s sci-fi thriller, "
-        "35mm film grain, anamorphic lens, cinematic composition, "
-        "high contrast, subtle color fringing, no text"
+        "cinematic 35mm film still, anamorphic lens, sharp subject focus, "
+        "rich contrast, rain mist in air, filmic grain, detailed textures, no text"
+    )
+    color_guard = (
+        "balanced color grade, natural skin and metal tones, red emergency strobes "
+        "against cool moonlight, no green wash, no monochrome"
     )
 
     shot_bits: List[str] = []
@@ -192,6 +307,7 @@ def _render_prompt_from_dict(beat: Dict[str, Any]) -> str:
             situation_desc,
             shot_desc,
             mood_desc,
+            color_guard,
             global_style,
         ]
         if x
@@ -200,8 +316,16 @@ def _render_prompt_from_dict(beat: Dict[str, Any]) -> str:
     return prompt
 
 
-def build_image_prompt(script: Script, act: Act, scene: Scene, beat: Beat) -> str:
+def build_image_prompt(
+    script: Script,
+    act: Act,
+    scene: Scene,
+    beat: Beat,
+    player_defs: Optional[Dict[str, str]] = None,
+) -> str:
     """Map our dataclasses to the beat-dict format and render the prompt."""
+    player_defs = player_defs or script.player_definitions or {}
+
     if isinstance(beat.shot, dict):
         shot = dict(beat.shot)
         if "camera_movement" in shot and "camera" not in shot:
@@ -211,12 +335,34 @@ def build_image_prompt(script: Script, act: Act, scene: Scene, beat: Beat) -> st
     else:
         shot = {}
 
-    players = []
+    def describe_player(name: str, inline_desc: Optional[str]) -> str:
+        """Return a consistent player string using shared definitions when available."""
+        base_key = name.split("(")[0].strip().lower()
+        shared = player_defs.get(name.lower()) or player_defs.get(base_key)
+        desc = inline_desc or shared
+        return f"{name} ({desc})" if desc else name
+
+    players: List[str] = []
     for p in scene.players:
-        if p.description:
-            players.append(f"{p.name} ({p.description})")
-        else:
-            players.append(p.name)
+        players.append(describe_player(p.name, p.description))
+    if beat.players:
+        players.extend(describe_player(str(x), None) for x in beat.players)
+    # de-duplicate while preserving order
+    seen_players = set()
+    players = [p for p in players if not (p in seen_players or seen_players.add(p))]
+
+    props: List[str] = []
+    if scene.props:
+        props.extend(scene.props)
+    if beat.props:
+        props.extend(beat.props)
+    seen_props = set()
+    props = [p for p in props if not (p in seen_props or seen_props.add(p))]
+
+    lighting = beat.lighting or scene.lighting
+    style = beat.style or scene.style
+    location = beat.location or scene.location
+    theme = beat.theme or script.theme
 
     vfx = beat.vfx
     if isinstance(vfx, list):
@@ -228,11 +374,11 @@ def build_image_prompt(script: Script, act: Act, scene: Scene, beat: Beat) -> st
 
     beat_dict = {
         "id": beat.id,
-        "theme": script.theme,
-        "style": scene.style,
-        "location": scene.location,
-        "lighting": scene.lighting,
-        "props": scene.props or [],
+        "theme": theme,
+        "style": style,
+        "location": location,
+        "lighting": lighting,
+        "props": props,
         "players": players,
         "shot": shot,
         "action": beat.action,
@@ -270,10 +416,18 @@ def wait_for_prompt(prompt_id: str, client_id: str) -> None:
             out = ws.recv()
             if isinstance(out, str):
                 message = json.loads(out)
-                if message.get("type") == "executing":
+                mtype = message.get("type")
+
+                if mtype == "execution_error":
+                    data = message.get("data", {})
+                    err = data.get("error") or data
+                    raise RuntimeError(f"Comfy execution error: {err}")
+
+                if mtype == "executing":
                     data = message.get("data", {})
                     if data.get("prompt_id") == prompt_id and data.get("node") is None:
-                        break  # node == None means the whole graph finished
+                        # node == None means the whole graph finished
+                        break
     finally:
         ws.close()
 
@@ -375,6 +529,7 @@ def run_video_workflow(
     beat_id: str,
     negative_prompt: str = DEFAULT_NEGATIVE,
     copy_frame_to_input: bool = True,
+    duration_seconds: Optional[int] = None,
 ) -> str:
     """Run the video workflow once for a beat and save the MP4 to output_dir."""
     with open(workflow_path, "r", encoding="utf-8") as f:
@@ -396,13 +551,13 @@ def run_video_workflow(
         workflow[VIDEO_NEG_PROMPT_NODE]["inputs"]["text"] = negative_prompt
 
     # Ensure the first frame is available where Comfy expects it
-    image_for_workflow = first_frame_path
+    image_for_workflow = os.path.abspath(first_frame_path)
     if copy_frame_to_input and COMFY_INPUT_DIR:
         os.makedirs(COMFY_INPUT_DIR, exist_ok=True)
         dest = os.path.join(COMFY_INPUT_DIR, os.path.basename(first_frame_path))
-        if os.path.abspath(first_frame_path) != os.path.abspath(dest):
+        if os.path.abspath(first_frame_path) != os.path.abspath(dest) or not os.path.isfile(dest):
             shutil.copyfile(first_frame_path, dest)
-        image_for_workflow = os.path.basename(dest)
+        image_for_workflow = os.path.basename(dest)  # Wan expects filenames from the input folder
 
     latent_node = workflow.get(VIDEO_LATENT_NODE)
     if latent_node and isinstance(latent_node.get("inputs"), dict):
@@ -410,6 +565,19 @@ def run_video_workflow(
             latent_node["inputs"]["image"] = image_for_workflow
         else:
             print("Warning: video latent node has no 'image' input; animating from noise.")
+        # Adjust length based on beat duration if provided
+        if duration_seconds is not None:
+            # Try to get fps from the CreateVideo node (57) if present, else default
+            fps = 24
+            create_video_node = workflow.get("57")
+            if create_video_node and isinstance(create_video_node.get("inputs"), dict):
+                fps = int(create_video_node["inputs"].get("fps", fps))
+            try:
+                frames = max(1, int(duration_seconds) * fps)
+                if "length" in latent_node["inputs"]:
+                    latent_node["inputs"]["length"] = frames
+            except Exception:
+                pass
 
     client_id = str(uuid.uuid4())
 
@@ -435,15 +603,29 @@ def run_video_workflow(
     file_list = (
         video_out.get("videos")
         or video_out.get("video")
+        or video_out.get("images")  # some SaveVideo variants use 'images'
+        or video_out.get("output")
+        or video_out.get("outputs")
+        or video_out.get("files")
         or video_out.get("Filenames")
         or video_out.get("filenames")
     )
     if not file_list:
-        raise RuntimeError("No video files recorded in SaveVideo outputs.")
+        # Persist the raw outputs for troubleshooting
+        debug_path = os.path.join(output_dir, f"beat_{beat_id}_video_outputs.json")
+        try:
+            with open(debug_path, "w", encoding="utf-8") as f:
+                json.dump(video_out, f, indent=2)
+            print(f"Warning: no video files recorded; dumped node output to {debug_path}")
+        except Exception:
+            pass
+        raise RuntimeError(
+            f"No video files recorded in SaveVideo outputs. Keys: {list(video_out.keys())}"
+        )
 
     vid_info = file_list[0]
     vid_bytes = fetch_file(
-        filename=vid_info["filename"],
+        filename=vid_info.get("filename") or vid_info.get("name"),
         subfolder=vid_info.get("subfolder", ""),
         folder_type=vid_info.get("type", "output"),
     )
@@ -512,6 +694,12 @@ def main():
         print(f"Failed to load YAML script: {e}")
         sys.exit(1)
 
+    players_path = os.getenv("PLAYERS_PATH", "players.yaml")
+    player_definitions = load_player_definitions(players_path)
+    if player_definitions:
+        print(f"Loaded {len(player_definitions)} player definitions from {players_path}")
+        script.player_definitions = player_definitions
+
     if not script.acts or not script.acts[0].scenes or not script.acts[0].scenes[0].beats:
         print("Script has no acts/scenes/beats to process.")
         sys.exit(1)
@@ -530,7 +718,9 @@ def main():
             print(f"\n--- Scene: {scene.name} ---")
             for beat in scene.beats:
                 print(f"\nBeat: {beat.id}")
-                prompt_text = build_image_prompt(script, act, scene, beat)
+                prompt_text = build_image_prompt(
+                    script, act, scene, beat, player_defs=player_definitions
+                )
 
                 try:
                     frame_path = run_image_workflow(
@@ -559,6 +749,7 @@ def main():
                         first_frame_path=frame_path,
                         output_dir=args.output_dir,
                         beat_id=beat.id or "beat",
+                        duration_seconds=beat.duration_seconds,
                     )
                     manifest.append(
                         {

@@ -43,6 +43,23 @@ python movie_runner.py ^
   --video-workflow workflow_video_api.json ^
   --output-dir movie_output
 ```
+Resume-safe full run (skips already-rendered beats) plus foley generation/muxing (requires HunyuanVideo-Foley repo, weights, config, and shared ffmpeg on PATH):
+```
+python movie_runner.py ^
+  --script congo2_anime.yaml ^
+  --image-workflow workflow_image_api.json ^
+  --video-workflow workflow_video_api.json ^
+  --output-dir movie_output ^
+  --resume ^
+  --foley-enable ^
+  --foley-repo HunyuanVideo-Foley ^
+  --foley-model-path HunyuanVideo-Foley/weights ^
+  --foley-config HunyuanVideo-Foley/configs/hunyuanvideo-foley-xxl.yaml ^
+  --foley-steps 10 ^
+  --ffmpeg-path ffmpeg
+```
+Single-line copy/paste:
+`python movie_runner.py --script congo2_anime.yaml --image-workflow workflow_image_api.json --video-workflow workflow_video_api.json --output-dir movie_output --resume --foley-enable --foley-repo HunyuanVideo-Foley --foley-model-path HunyuanVideo-Foley/weights --foley-config HunyuanVideo-Foley/configs/hunyuanvideo-foley-xxl.yaml --foley-steps 10 --ffmpeg-path ffmpeg`
 Outputs per beat:
 - PNG keyframe: `movie_output/beat_<beat_id>_keyframe.png`
 - MP4 clip: `movie_output/beat_<beat_id>_clip.mp4`
@@ -94,3 +111,14 @@ root/
     input/   # keyframes + audio copied here automatically
     output/  # ComfyUI outputs
 ```
+
+## End-to-end setup checklist
+- Clone this repo (contains `movie_runner.py`, YAML scripts, workflows).
+- Place your ComfyUI checkout in `root/ComfyUI` with required models in the usual `models/` subfolders.
+- Place API-format workflows in the repo root as `workflow_image_api.json` and `workflow_video_api.json` (or update paths via flags/`.env`).
+- Create and activate a venv; install Python deps: `python -m venv venv && venv\Scripts\activate && pip install websocket-client pyyaml python-dotenv`.
+- Add any extra deps you need (e.g., `pyttsx3` for TTS, torch/torchaudio matching your GPU build).
+- Pull HunyuanVideo-Foley into `root/HunyuanVideo-Foley`, place weights under `HunyuanVideo-Foley/weights`, and keep its config at `HunyuanVideo-Foley/configs/hunyuanvideo-foley-xxl.yaml`.
+- Install a shared ffmpeg (full build) and ensure `ffmpeg` is on PATH (required for torchcodec and muxing).
+- Run the full resume-safe pipeline with foley:
+  `python movie_runner.py --script congo2_anime.yaml --image-workflow workflow_image_api.json --video-workflow workflow_video_api.json --output-dir movie_output --resume --foley-enable --foley-repo HunyuanVideo-Foley --foley-model-path HunyuanVideo-Foley/weights --foley-config HunyuanVideo-Foley/configs/hunyuanvideo-foley-xxl.yaml --foley-steps 10 --ffmpeg-path ffmpeg`

@@ -4,9 +4,13 @@ import os
 import shutil
 import sys
 import time
+from datetime import datetime
 import uuid
 import random
 import base64
+import math
+import array
+import subprocess
 from dataclasses import dataclass
 from typing import List, Optional, Dict, Any
 
@@ -66,6 +70,27 @@ DEFAULT_NEGATIVE = (
 )
 
 
+def extract_model_names(workflow_path: str) -> str:
+    """Extract model/ckpt names from a Comfy API workflow for logging."""
+    try:
+        with open(workflow_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        names = []
+        for node in data.values():
+            if not isinstance(node, dict):
+                continue
+            inputs = node.get("inputs", {})
+            for key, val in inputs.items():
+                if isinstance(val, str) and any(
+                    tok in key.lower() for tok in ("unet", "clip", "vae", "model", "ckpt")
+                ):
+                    names.append(f"{key}={val}")
+        deduped = list(dict.fromkeys(names))
+        return "; ".join(deduped) if deduped else "unknown"
+    except Exception:
+        return "unknown"
+
+
 # -------------------------------------------------------------------
 # DATA MODELS FOR THE SCRIPT
 # -------------------------------------------------------------------
@@ -82,6 +107,7 @@ class Beat:
     shot: Any
     action: str
     duration_seconds: Optional[int] = None
+    audio_prompt: Optional[str] = None
     sfx: Optional[str] = None
     vfx: Optional[str] = None
     dialogue: Optional[str] = None
@@ -223,6 +249,7 @@ def load_script_from_yaml(path: str) -> Script:
                 beat_location = beat_data.get("location") or comp.get("location")
                 beat_props = _list_of_strings(beat_data.get("props") or comp.get("props"))
                 beat_players = _list_of_strings(beat_data.get("players") or comp.get("players"))
+                beat_audio_prompt = beat_data.get("audio_prompt") or comp.get("audio_prompt")
                 duration_val = beat_data.get("duration_seconds")
                 try:
                     duration_val = int(duration_val) if duration_val is not None else None
@@ -253,6 +280,7 @@ def load_script_from_yaml(path: str) -> Script:
                     shot=shot,
                     action=action,
                     duration_seconds=duration_val,
+                    audio_prompt=beat_audio_prompt,
                     sfx=sfx_val,
                     vfx=vfx_val,
                     dialogue=dialogue_val,
@@ -488,6 +516,35 @@ def build_image_prompt(
     return f"{base_prompt}, distinct composition: {variation}"
 
 
+def build_audio_prompt(
+    script: Script,
+    act: Act,
+    scene: Scene,
+    beat: Beat,
+) -> str:
+    """Generate an audio-focused prompt for ambience/foley."""
+    parts: List[str] = []
+    if beat.audio_prompt:
+        parts.append(beat.audio_prompt)
+    else:
+        if scene.location or beat.location:
+            parts.append(f"environment: {beat.location or scene.location}")
+        if beat.action:
+            parts.append(f"foreground action sounds: {beat.action}")
+        if beat.props:
+            parts.append(f"props: {', '.join(beat.props)}")
+        if beat.vfx:
+            parts.append(f"ambient effects: {beat.vfx}")
+        if beat.sfx:
+            parts.append(f"intended sfx: {beat.sfx}")
+        if beat.dialogue:
+            parts.append("include subtle presence for dialogue space, no voice")
+        if scene.lighting or beat.lighting:
+            parts.append(f"mood: {beat.lighting or scene.lighting}")
+    parts.append("no music, natural foley, cinematic spatial mix, balanced levels, avoid clipping")
+    return "; ".join(p for p in parts if p)
+
+
 # -------------------------------------------------------------------
 # COMFYUI API HELPERS
 # -------------------------------------------------------------------
@@ -547,6 +604,134 @@ def ensure_silence_wav(path: str, seconds: float = 1.0, sample_rate: int = 44100
         silence_frame = struct.pack("<h", 0)
         wf.writeframes(silence_frame * n_frames)
     return path
+
+
+def synthesize_ambience(prompt: str, out_path: str, duration: float = 6.0, sample_rate: int = 44100) -> bool:
+    """
+    Lightweight procedural ambience generator (wind/hum/ticks) using stdlib only.
+    Not studio-grade, but better than silence for background fill.
+    """
+    try:
+        rng = random.Random(f"amb-{prompt}")
+        total = int(duration * sample_rate)
+        arr = array.array("h")
+
+        # base parameters
+        hum_freq = rng.uniform(50.0, 180.0)
+        hum_amp = rng.uniform(0.05, 0.12)
+        wind_amp = rng.uniform(0.12, 0.2)
+        tick_interval = rng.randint(sample_rate // 2, sample_rate * 2)
+        tick_amp = rng.uniform(0.1, 0.2)
+
+        hum_phase = 0.0
+        wind = 0.0
+
+        for i in range(total):
+            # simple low-passed noise for wind
+            n = (rng.random() - 0.5) * 2.0
+            wind = wind * 0.985 + n * 0.015
+
+            # hum sine
+            hum_phase += 2.0 * math.pi * hum_freq / sample_rate
+            hum = math.sin(hum_phase)
+
+            # occasional ticks/pops
+            tick = 0.0
+            if tick_interval and (i % tick_interval == 0):
+                tick = tick_amp * (rng.random() - 0.5) * 2.0
+                tick_interval = rng.randint(sample_rate // 2, sample_rate * 2)
+
+            sample = wind * wind_amp + hum * hum_amp + tick
+            sample = max(-1.0, min(1.0, sample))
+            arr.append(int(sample * 32767))
+
+        with wave.open(out_path, "w") as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(sample_rate)
+            wf.writeframes(arr.tobytes())
+        return os.path.isfile(out_path)
+    except Exception:
+        return False
+
+
+def run_hunyuan_foley(
+    clip_path: str,
+    prompt_text: str,
+    repo_path: str,
+    model_path: str,
+    config_path: str,
+    output_dir: str,
+    num_steps: int = 10,
+    ffmpeg_path: Optional[str] = "ffmpeg",
+) -> Optional[str]:
+    """
+    Call HunyuanVideo-Foley's infer.py to generate a WAV, then mux it into the clip with ffmpeg.
+    Returns new clip path on success, or None on failure.
+    """
+    clip_path = os.path.abspath(clip_path)
+    output_dir = os.path.abspath(output_dir)
+    repo_path = os.path.abspath(repo_path)
+    model_path = os.path.abspath(model_path)
+    config_path = os.path.abspath(config_path)
+    if not os.path.isfile(clip_path):
+        print(f"Warning: Foley clip not found on disk: {clip_path}")
+        return None
+    try:
+        os.makedirs(output_dir, exist_ok=True)
+        cmd = [
+            sys.executable,
+            os.path.join(repo_path, "infer.py"),
+            "--model_path",
+            model_path,
+            "--config_path",
+            config_path,
+            "--single_video",
+            clip_path,
+            "--single_prompt",
+            prompt_text,
+            "--num_inference_steps",
+            str(num_steps),
+            "--output_dir",
+            output_dir,
+        ]
+        subprocess.run(cmd, check=True, cwd=repo_path)
+    except Exception as exc:
+        print(f"Warning: Foley generation failed for {clip_path}: {exc}")
+        return None
+
+    # pick most recent wav in output_dir
+    wav_files = [os.path.join(output_dir, f) for f in os.listdir(output_dir) if f.lower().endswith(".wav")]
+    if not wav_files:
+        print("Warning: Foley generation produced no wav files.")
+        return None
+    wav_path = max(wav_files, key=os.path.getmtime)
+
+    # mux with ffmpeg
+    try:
+        new_path = os.path.splitext(clip_path)[0] + "_with_foley.mp4"
+        cmd = [
+            ffmpeg_path or "ffmpeg",
+            "-y",
+            "-i",
+            clip_path,
+            "-i",
+            wav_path,
+            "-map",
+            "0:v:0",
+            "-map",
+            "1:a:0",
+            "-c:v",
+            "copy",
+            "-c:a",
+            "aac",
+            new_path,
+        ]
+        subprocess.run(cmd, check=True)
+        return new_path
+    except Exception as exc:
+        print(f"Warning: ffmpeg mux failed: {exc}")
+        return None
     try:
         engine = pyttsx3.init()
         if voice:
@@ -1014,6 +1199,37 @@ def main():
         action="store_true",
         help="Auto-generate simple narration audio per beat (pyttsx3 required). Uses beat dialogue or prompt text.",
     )
+    parser.add_argument(
+        "--foley-enable",
+        action="store_true",
+        help="Run HunyuanVideo-Foley on each rendered clip and mux the result (requires repo/model/config).",
+    )
+    parser.add_argument(
+        "--foley-repo",
+        default=None,
+        help="Path to HunyuanVideo-Foley repo (where infer.py lives).",
+    )
+    parser.add_argument(
+        "--foley-model-path",
+        default=None,
+        help="Path to HunyuanVideo-Foley pretrained model directory.",
+    )
+    parser.add_argument(
+        "--foley-config",
+        default=None,
+        help="Path to the HunyuanVideo-Foley config YAML (e.g., configs/hunyuanvideo-foley-xxl.yaml).",
+    )
+    parser.add_argument(
+        "--foley-steps",
+        type=int,
+        default=10,
+        help="Denoising steps for HunyuanVideo-Foley sampling (default: 10).",
+    )
+    parser.add_argument(
+        "--ffmpeg-path",
+        default="ffmpeg",
+        help="ffmpeg binary to use for muxing foley audio (default: ffmpeg in PATH).",
+    )
 
     args = parser.parse_args()
 
@@ -1028,6 +1244,9 @@ def main():
     if not os.path.isfile(args.video_workflow):
         print(f"Video workflow JSON not found: {args.video_workflow}")
         sys.exit(1)
+
+    image_models = extract_model_names(args.image_workflow)
+    video_models = extract_model_names(args.video_workflow)
 
     try:
         ensure_comfy_available(SERVER_ADDRESS)
@@ -1057,6 +1276,7 @@ def main():
 
     os.makedirs(args.output_dir, exist_ok=True)
     manifest_path = args.manifest or os.path.join(args.output_dir, "render_manifest.json")
+    log_path = os.path.join(args.output_dir, "run_log.txt")
     manifest: List[Dict[str, Any]] = []
     manifest_index: Dict[str, Dict[str, Any]] = {}
 
@@ -1101,25 +1321,25 @@ def main():
                 return img
         return None
 
-    def select_audio(beat: Beat, prompt_text: str) -> Optional[str]:
+    def select_audio(beat: Beat, prompt_text: str, audio_prompt: str) -> Optional[str]:
         # Prefer per-beat sfx if it points to a file; else use CLI audio_file
         sfx_path = None
         if beat.sfx and isinstance(beat.sfx, str) and os.path.isfile(beat.sfx):
             sfx_path = beat.sfx
         chosen = sfx_path or args.audio_file
 
-        # If generation requested and no file chosen, synthesize quick narration
+        # If generation requested and no file chosen, synthesize quick narration or ambience
         if args.generate_audio and not chosen:
-            text_for_audio = (
-                beat.dialogue
-                or beat.action
-                or prompt_text
-            )
+            text_for_audio = beat.dialogue or beat.action or audio_prompt
+            audio_out = os.path.join(args.output_dir, f"beat_{beat.id}_audio.wav")
+            ok = False
             if text_for_audio:
-                audio_out = os.path.join(args.output_dir, f"beat_{beat.id}_audio.wav")
                 ok = synthesize_audio(text_for_audio[:280], audio_out)
-                if ok:
-                    chosen = audio_out
+            if not ok:
+                # fallback to procedural ambience using the prompt text
+                ok = synthesize_ambience(audio_prompt or prompt_text, audio_out, duration=derive_duration(beat) or 6.0)
+            if ok:
+                chosen = audio_out
         return chosen
 
     for act in script.acts:
@@ -1131,6 +1351,12 @@ def main():
                 prompt_text = build_image_prompt(
                     script, act, scene, beat, player_defs=player_definitions
                 )
+                audio_prompt = beat.audio_prompt or build_audio_prompt(script, act, scene, beat)
+
+                beat_start = time.perf_counter()
+                image_time = 0.0
+                video_time = 0.0
+                foley_time = 0.0
 
                 beat_id = beat.id or "beat"
                 frame_path = os.path.join(args.output_dir, f"beat_{beat_id}_keyframe.png")
@@ -1146,6 +1372,16 @@ def main():
                 # Skip if clip already exists and resume enabled
                 if args.resume and existing_clip:
                     print(f"Resume: clip already exists for {beat_id}, skipping.")
+                    final_clip = clip_path
+                    beat_total = time.perf_counter() - beat_start
+                    try:
+                        log_line = f"{datetime.now().isoformat()} beat={beat_id} image_time={image_time:.2f}s video_time={video_time:.2f}s foley_time={foley_time:.2f}s total={beat_total:.2f}s image_models={image_models} video_models={video_models} foley_model={args.foley_model_path or 'none'} final_clip={final_clip}"
+                        with open(log_path, "a", encoding="utf-8") as lf:
+                            lf.write(log_line + "\n")
+                        print(log_line)
+                    except Exception:
+                        pass
+
                     manifest_index[beat_id] = {
                         "beat": beat.id,
                         "act": act.name,
@@ -1160,6 +1396,7 @@ def main():
                 frame_ready = os.path.isfile(frame_path)
                 if not frame_ready:
                     try:
+                        t_img = time.perf_counter()
                         frame_path = run_image_workflow(
                             workflow_path=args.image_workflow,
                             prompt_text=prompt_text,
@@ -1167,6 +1404,7 @@ def main():
                             beat_id=beat_id,
                             character_image=choose_character_image(beat, scene),
                         )
+                        image_time = time.perf_counter() - t_img
                         frame_ready = True
                     except Exception as e:
                         print(f"❌ Error during image generation for {beat.id}: {e}")
@@ -1183,6 +1421,7 @@ def main():
 
                 # Run video if needed
                 try:
+                    t_vid = time.perf_counter()
                     clip_path = run_video_workflow(
                         workflow_path=args.video_workflow,
                         prompt_text=prompt_text,
@@ -1190,8 +1429,41 @@ def main():
                         output_dir=args.output_dir,
                         beat_id=beat_id,
                         duration_seconds=derive_duration(beat),
-                        audio_path=select_audio(beat, prompt_text),
+                        audio_path=select_audio(beat, prompt_text, audio_prompt),
                     )
+                    video_time = time.perf_counter() - t_vid
+                    # Optional: run HunyuanVideo-Foley and remux
+                    if (
+                        args.foley_enable
+                        and args.foley_repo
+                        and args.foley_model_path
+                        and args.foley_config
+                    ):
+                        foley_out_dir = os.path.join(args.output_dir, "foley_outputs")
+                        t_foley = time.perf_counter()
+                        new_clip = run_hunyuan_foley(
+                            clip_path=clip_path,
+                            prompt_text=audio_prompt or prompt_text,
+                            repo_path=args.foley_repo,
+                            model_path=args.foley_model_path,
+                            config_path=args.foley_config,
+                            output_dir=foley_out_dir,
+                            num_steps=args.foley_steps,
+                            ffmpeg_path=args.ffmpeg_path,
+                        )
+                        if new_clip and os.path.isfile(new_clip):
+                            foley_time = time.perf_counter() - t_foley
+                            clip_path = new_clip
+                    final_clip = clip_path
+                    beat_total = time.perf_counter() - beat_start
+                    try:
+                        log_line = f"{datetime.now().isoformat()} beat={beat_id} image_time={image_time:.2f}s video_time={video_time:.2f}s foley_time={foley_time:.2f}s total={beat_total:.2f}s image_models={image_models} video_models={video_models} foley_model={args.foley_model_path or 'none'} final_clip={final_clip}"
+                        with open(log_path, "a", encoding="utf-8") as lf:
+                            lf.write(log_line + "\\n")
+                        print(log_line)
+                    except Exception:
+                        pass
+
                     manifest_index[beat_id] = {
                         "beat": beat.id,
                         "act": act.name,

@@ -1,0 +1,234 @@
+title: "CONGO 2.2 Script"
+theme: "Corporate extraction vs. emergent intelligence"
+acts:
+  - name: "Act I - Invitation to Hell"
+    scenes:
+      - name: "Crash and Signal"
+        location: "night jungle canopy and TraviCom geodata lab"
+        style: "chaotic crash POV, sterile corporate blue"
+        lighting: "red emergency strobes, lab cold LED"
+        props:
+          - "cargo straps whipping"
+          - "broken crates"
+          - "holo flight path display"
+        players:
+          - name: "Amy"
+            description: "robotic ape with eye camera"
+          - name: "Karen Ross"
+            description: "ruthless TraviCom exec"
+        beats:
+          - id: "A1-S1-B1"
+            shot:
+              type: "POV"
+              framing: "INT cargo hold, violently spinning"
+              camera: "handheld chaos"
+            action: "Amy is ejected from the crashing Stork cargo jet into the jungle canopy."
+            vfx: "sparks, motion blur, red strobes"
+            sfx: "alarms, ripping metal"
+            duration_seconds: 5
+          - id: "A1-S1-B2"
+            shot:
+              type: "lab closeup"
+              framing: "Karen at holo display"
+              camera: "slow push"
+            action: "Karen studies the lone power ping from Zinj, fury replacing grief."
+            vfx: "holographic map overlays"
+            sfx: "low analytical hum"
+            duration_seconds: 5
+      - name: "The Call to Power"
+        location: "TraviCom boardroom / Berkeley ruins"
+        style: "minimalist corporate vs. decayed academic"
+        lighting: "white corporate glow vs. dusty amber"
+        props:
+          - "yoga mat and holo wall"
+          - "ruined lecture stage"
+          - "dusty AMY shell"
+        players:
+          - name: "Karen Ross"
+            description: "predatory exec in control"
+          - name: "Peter Elliott"
+            description: "disgraced academic, attached to AMY"
+        beats:
+          - id: "A1-S2-B1"
+            shot:
+              type: "wide"
+              framing: "Karen in minimalist office"
+              camera: "static symmetry"
+            action: "Karen executes a rival during yoga, then demands a new Congo mission."
+            duration_seconds: 5
+          - id: "A1-S2-B2"
+            shot:
+              type: "over-shoulder"
+              framing: "Karen watching Peter lecture"
+              camera: "digital zoom through glass"
+            action: "Karen targets Peter as the disposable key to talk to gorillas."
+            duration_seconds: 5
+
+  - name: "Act II - The Agony Express"
+    scenes:
+      - name: "Flight and Attack"
+        location: "TraviCom airship over Atlantic"
+        style: "neon corporate transport, storm outside"
+        lighting: "red emergency strobes"
+        props:
+          - "strapped AMY unit"
+          - "weapon racks"
+        players:
+          - name: "Karen"
+            description: "commanding"
+          - name: "Monroe"
+            description: "cynical fixer"
+          - name: "Peter"
+            description: "nervous linguist"
+        beats:
+          - id: "A2-S1-B1"
+            shot:
+              type: "medium"
+              framing: "cargo bay under turbulence"
+              camera: "shaky handheld"
+            action: "EMP strike hits; team braces as bay lurches."
+            sfx: "alarms, metal groan"
+            duration_seconds: 5
+          - id: "A2-S1-B2"
+            shot:
+              type: "insert"
+              framing: "Peter decoding burst on tablet"
+              camera: "over-shoulder"
+            action: "Peter finds territorial signals in static—gorillas set traps."
+            duration_seconds: 5
+      - name: "The Long Drop"
+        location: "night jungle, crash site ravine"
+        style: "rain-soaked, high-contrast survival"
+        lighting: "moonlit rain, headlamps"
+        props:
+          - "broken fuselage"
+          - "processor crate"
+        players:
+          - name: "Karen"
+            description: "laser-focused"
+          - name: "Monroe"
+            description: "field-pro"
+          - name: "Peter"
+            description: "haunted"
+        beats:
+          - id: "A2-S2-B1"
+            shot:
+              type: "wide"
+              framing: "wreckage in swamp ravine"
+              camera: "slow push"
+            action: "They find processors intact but AMY data module cut out."
+            duration_seconds: 5
+          - id: "A2-S2-B2"
+            shot:
+              type: "close"
+              framing: "clean tear where module was"
+              camera: "macro tilt"
+            action: "Peter realizes the stable power ping is the stolen module in Zinj."
+            duration_seconds: 5
+      - name: "Tunnels and Nursery"
+        location: "geothermal tunnels"
+        style: "steamy, bioluminescent, claustrophobic"
+        lighting: "glow lichen, headlamps"
+        props:
+          - "scratch-mark maps"
+          - "organic mucus floor"
+        players:
+          - name: "Karen"
+          - name: "Monroe"
+          - name: "Peter"
+        beats:
+          - id: "A2-S3-B1"
+            shot:
+              type: "POV"
+              framing: "narrow vent with scratch arrows"
+              camera: "helmet cam"
+            action: "Peter leads using gorilla map; team steps through bio-trap."
+            duration_seconds: 5
+          - id: "A2-S3-B2"
+            shot:
+              type: "wide"
+              framing: "nursery chamber with females and infants"
+              camera: "low, hidden"
+            action: "They witness gorilla mothers signing 'silent watch' to young."
+            duration_seconds: 5
+
+  - name: "Act III - Glitch at the End of the World"
+    scenes:
+      - name: "Caldera Assault"
+        location: "volcanic caldera, Zinj Data Haven pyramid"
+        style: "ashen wides, electric blue pulses"
+        lighting: "volcanic haze, blue pulse"
+        props:
+          - "rock shelf cover"
+          - "frequency emitter"
+        players:
+          - name: "Karen"
+          - name: "Monroe"
+          - name: "Peter"
+        beats:
+          - id: "A3-S1-B1"
+            shot:
+              type: "wide run"
+              framing: "team sprinting across open ash field"
+              camera: "tracking low"
+            action: "Under pulse-weapon fire, they reach the Haven gateway."
+            duration_seconds: 5
+          - id: "A3-S1-B2"
+            shot:
+              type: "insert"
+              framing: "AMY emitter on rock"
+              camera: "macro"
+            action: "Gateway shimmers open with AMY frequency key."
+            duration_seconds: 5
+      - name: "The Vault and Betrayal"
+        location: "data chamber, then vault"
+        style: "biotech console glow, collapsing stone"
+        lighting: "blue circuits, red alarms"
+        props:
+          - "stolen module on console"
+          - "mining laser"
+        players:
+          - name: "Karen"
+          - name: "Monroe"
+          - name: "Peter"
+        beats:
+          - id: "A3-S2-B1"
+            shot:
+              type: "three-shot"
+              framing: "humans vs. console-operating gorillas"
+              camera: "locked mid"
+            action: "Standoff turns violent; gorillas try to delete data."
+            duration_seconds: 5
+          - id: "A3-S2-B2"
+            shot:
+              type: "close"
+              framing: "Karen aiming mining laser"
+              camera: "tight profile"
+            action: "Karen melts creatures, destabilizing volcano and sealing fate."
+            duration_seconds: 5
+      - name: "Escape and New Game"
+        location: "balloon escape, Yakamura gunship"
+        style: "absurd branded balloon vs. high-tech gunship"
+        lighting: "eruption glow, cockpit LEDs"
+        props:
+          - "Zinj-branded balloon"
+          - "flare gun"
+        players:
+          - name: "Karen"
+          - name: "Monroe"
+          - name: "Peter"
+        beats:
+          - id: "A3-S3-B1"
+            shot:
+              type: "wide"
+              framing: "balloon over erupting volcano"
+              camera: "aerial"
+            action: "Karen bluffs gunship with flare; chaos erupts."
+            duration_seconds: 5
+          - id: "A3-S3-B2"
+            shot:
+              type: "cockpit"
+              framing: "Karen in command chair"
+              camera: "low hero"
+            action: "She takes the gunship, eyeing her next conquest."
+            duration_seconds: 5

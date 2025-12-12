@@ -16,6 +16,7 @@ acts:
             description: "tired archivist in long coat, reflective visor"
         beats:
           - id: "A1-S1-B1"
+            duration_seconds: 5
             shot:
               type: "wide establishing"
               framing: "hero on rooftop edge"
@@ -25,6 +26,7 @@ acts:
             vfx: "subtle holographic glitches in the skyline"
             dialogue: "Voiceover: 'Every memory has a cost.'"
           - id: "A1-S1-B2"
+            duration_seconds: 5
             shot:
               type: "medium close"
               framing: "profile of hero"
@@ -48,6 +50,7 @@ acts:
             description: "masked figure with glowing satchel"
         beats:
           - id: "A1-S2-B1"
+            duration_seconds: 5
             shot:
               type: "over-shoulder"
               framing: "Courier handing data drive"
@@ -57,6 +60,7 @@ acts:
             vfx: "data drive glows softly"
             dialogue: "Courier: 'Run.'"
           - id: "A1-S2-B2"
+            duration_seconds: 5
             shot:
               type: "wide escape"
               framing: "Hero running down alley"

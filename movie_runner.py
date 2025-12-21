@@ -664,6 +664,7 @@ def run_hunyuan_foley(
     output_dir: str,
     num_steps: int = 10,
     ffmpeg_path: Optional[str] = "ffmpeg",
+    enable_offload: bool = False,
 ) -> Optional[str]:
     """
     Call HunyuanVideo-Foley's infer.py to generate a WAV, then mux it into the clip with ffmpeg.
@@ -695,6 +696,8 @@ def run_hunyuan_foley(
             "--output_dir",
             output_dir,
         ]
+        if enable_offload:
+            cmd.append("--enable_offload")
         subprocess.run(cmd, check=True, cwd=repo_path)
     except Exception as exc:
         print(f"Warning: Foley generation failed for {clip_path}: {exc}")
@@ -1230,6 +1233,11 @@ def main():
         default="ffmpeg",
         help="ffmpeg binary to use for muxing foley audio (default: ffmpeg in PATH).",
     )
+    parser.add_argument(
+        "--foley-offload",
+        action="store_true",
+        help="Enable model offloading in HunyuanVideo-Foley to save VRAM/RAM.",
+    )
 
     args = parser.parse_args()
 
@@ -1450,6 +1458,7 @@ def main():
                             output_dir=foley_out_dir,
                             num_steps=args.foley_steps,
                             ffmpeg_path=args.ffmpeg_path,
+                            enable_offload=args.foley_offload,
                         )
                         if new_clip and os.path.isfile(new_clip):
                             foley_time = time.perf_counter() - t_foley
